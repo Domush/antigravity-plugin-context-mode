@@ -43,16 +43,24 @@ if (isSidecarEnv) {
   app.api("/api/stats", (data) => {
     const sessionId = data.sessionId || app.config.conversationId || "default";
     let stats = store.getStats(sessionId);
-    if (!stats.calls && !stats.sourcesCount && sessionId !== "default") {
+    if (!stats.calls && !stats.sourcesCount && sessionId !== "default" && sessionId !== "all") {
       const defStats = store.getStats("default");
       if (defStats.calls || defStats.sourcesCount) {
         stats = defStats;
       }
     }
-    stats.cutoffBytes = parseInt(process.env.CONTEXT_MODE_MAX_READ_BYTES || "8192", 10);
+    stats.cutoffBytes = store.getCutoff(sessionId);
+    stats.globalCutoffBytes = store.getCutoff(null);
     stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
     return stats;
   }, "GET");
+
+  app.api("/api/cutoff", (data) => {
+    const sessionId = data.sessionId || app.config.conversationId || null;
+    const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
+    const saved = store.setCutoff(cutoffBytes, sessionId);
+    return { ok: true, cutoffBytes: saved, sessionId };
+  }, "POST");
 
   app.api("/api/doctor", () => {
     return store.doctor();
@@ -90,16 +98,54 @@ if (isSidecarEnv) {
     if (req.method === "GET" && url.pathname === "/api/stats") {
       const sessionId = url.searchParams.get("sessionId") || "default";
       let stats = store.getStats(sessionId);
-      if (!stats.calls && !stats.sourcesCount && sessionId !== "default") {
+      if (!stats.calls && !stats.sourcesCount && sessionId !== "default" && sessionId !== "all") {
         const defStats = store.getStats("default");
         if (defStats.calls || defStats.sourcesCount) {
           stats = defStats;
         }
       }
-      stats.cutoffBytes = parseInt(process.env.CONTEXT_MODE_MAX_READ_BYTES || "8192", 10);
+      stats.cutoffBytes = store.getCutoff(sessionId);
+      stats.globalCutoffBytes = store.getCutoff(null);
       stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(stats));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/cutoff") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        try {
+          const data = JSON.parse(body || "{}");
+          const sessionId = data.sessionId || null;
+          const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
+          const saved = store.setCutoff(cutoffBytes, sessionId);
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, cutoffBytes: saved, sessionId }));
+        } catch (e) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/purge") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        try {
+          const data = JSON.parse(body || "{}");
+          const sessionId = data.sessionId || "default";
+          const result = store.purge({ scope: data.scope || "session", sessionId });
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(result));
+        } catch (e) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
       return;
     }
 

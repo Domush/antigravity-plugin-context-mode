@@ -1,17 +1,23 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
+import { ContextModeStore } from "../lib/store.js";
 
 export const DEFAULT_MAX_READ_BYTES = 8192; // 8 KB default cutoff
 export const DEFAULT_MAX_LINE_RANGE = 200; // 200 lines max un-indexed slice
 
-function getMaxReadBytes() {
-  const envVal = process.env.CONTEXT_MODE_MAX_READ_BYTES;
-  if (envVal) {
-    const parsed = parseInt(envVal, 10);
-    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+function getMaxReadBytes(sessionId = null) {
+  try {
+    const store = new ContextModeStore();
+    return store.getCutoff(sessionId);
+  } catch {
+    const envVal = process.env.CONTEXT_MODE_MAX_READ_BYTES;
+    if (envVal) {
+      const parsed = parseInt(envVal, 10);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    return DEFAULT_MAX_READ_BYTES;
   }
-  return DEFAULT_MAX_READ_BYTES;
 }
 
 function getMaxLineRange() {
@@ -72,13 +78,19 @@ async function main() {
   const toolName = toolCall.name || "";
   const args = toolCall.args || {};
   const cwd = payload.cwd || process.cwd();
+  const sessionId =
+    payload.sessionId ||
+    payload.session_id ||
+    payload.conversationId ||
+    process.env.ANTIGRAVITY_CONVERSATION_ID ||
+    null;
 
   // 1. Guard read_file
   if (toolName === "read_file") {
     const filePath = args.Path || args.path || args.filePath || "";
     const startLine = args.StartLine ?? args.startLine ?? 1;
     const endLine = args.EndLine ?? args.endLine ?? null;
-    const maxReadBytes = getMaxReadBytes();
+    const maxReadBytes = getMaxReadBytes(sessionId);
     const maxLineRange = getMaxLineRange();
 
     if (filePath) {
@@ -86,7 +98,7 @@ async function main() {
       try {
         if (fs.existsSync(absPath)) {
           const stat = fs.statSync(absPath);
-          const isLargeFile = stat.size > maxReadBytes;
+          const isLargeFile = maxReadBytes > 0 && stat.size > maxReadBytes;
           const isWideRange = endLine === null || endLine - startLine > maxLineRange;
 
           if (isLargeFile && isWideRange) {

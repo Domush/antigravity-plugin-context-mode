@@ -66,8 +66,18 @@
           </button>
         </div>
 
-        <div class="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] text-slate-400 font-mono">
-          Cutoff: <span id="cutoff-pill" class="text-indigo-300 font-semibold">8 KB</span>
+        <!-- Cutoff Dropdown -->
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] text-slate-400 font-mono">
+          <span id="cutoff-scope-label">Cutoff:</span>
+          <select id="cutoff-select" onchange="changeCutoff(this.value)" class="bg-[#181a28] text-indigo-300 font-semibold rounded px-1.5 py-0.5 border border-white/10 focus:outline-none focus:border-indigo-500 cursor-pointer">
+            <option value="2048">2 KB</option>
+            <option value="4096">4 KB</option>
+            <option value="8192">8 KB</option>
+            <option value="16384">16 KB</option>
+            <option value="32768">32 KB</option>
+            <option value="65536">64 KB</option>
+            <option value="0">none</option>
+          </select>
         </div>
         
         <button id="refresh-btn" onclick="refreshData(true)" class="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition flex items-center justify-center" title="Refresh Telemetry">
@@ -176,7 +186,7 @@
             <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
             <div class="leading-relaxed">
               <strong class="font-mono text-slate-200 font-semibold">PreToolUse (read_file):</strong> 
-              <span class="text-slate-400">Blocks files &gt;8 KB un-paged; requires line slices (&le;200 lines)</span>
+              <span id="gate-read-cutoff" class="text-slate-400">Blocks files &gt;8 KB un-paged; requires line slices (&le;200 lines)</span>
             </div>
           </div>
           <div class="flex items-start gap-2">
@@ -258,7 +268,7 @@
           </svg>
           Recent Indexed Sources
         </div>
-        <button onclick="purgeSession()" class="text-[11px] px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition">
+        <button id="purge-btn" onclick="handlePurgeClick()" class="text-[11px] px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition">
           Purge Session
         </button>
       </div>
@@ -271,18 +281,34 @@
 
   <script>
     let currentScope = 'session';
+    let cachedStats = null;
 
     function setScope(scope) {
       currentScope = scope;
       const sessionBtn = document.getElementById('scope-session-btn');
       const allBtn = document.getElementById('scope-all-btn');
+      const purgeBtn = document.getElementById('purge-btn');
+      const cutoffLabel = document.getElementById('cutoff-scope-label');
+
       if (scope === 'session') {
         sessionBtn.className = 'px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition';
         allBtn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
+        purgeBtn.innerText = 'Purge Session';
+        purgeBtn.title = 'Clear indexed sources and events for current session';
+        cutoffLabel.innerText = 'Cutoff:';
       } else {
         allBtn.className = 'px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition';
         sessionBtn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
+        purgeBtn.innerText = 'Reset Lifetime Figures';
+        purgeBtn.title = 'Clear all stored sources, events, and metrics across all sessions';
+        cutoffLabel.innerText = 'Global Cutoff:';
       }
+
+      // Update dropdown selection based on active scope
+      if (cachedStats) {
+        updateCutoffDropdown(cachedStats);
+      }
+
       refreshData(true);
     }
 
@@ -299,6 +325,54 @@
         return window.sidecar.fetch(path, options);
       }
       return fetch(path, options);
+    }
+
+    function updateCutoffDropdown(s) {
+      const cutoffSelect = document.getElementById('cutoff-select');
+      const activeCutoff = currentScope === 'all' 
+        ? (s.globalCutoffBytes !== undefined ? s.globalCutoffBytes : 8192)
+        : (s.cutoffBytes !== undefined ? s.cutoffBytes : 8192);
+
+      const targetVal = String(activeCutoff);
+      let matched = false;
+      for (const opt of cutoffSelect.options) {
+        if (opt.value === targetVal) {
+          cutoffSelect.value = targetVal;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        cutoffSelect.value = targetVal === '0' ? '0' : '8192';
+      }
+
+      const gateReadCutoff = document.getElementById('gate-read-cutoff');
+      if (gateReadCutoff) {
+        if (activeCutoff === 0) {
+          gateReadCutoff.innerText = 'Cutoff disabled (all file sizes allowed un-paged)';
+        } else {
+          gateReadCutoff.innerText = `Blocks files >${formatBytes(activeCutoff)} un-paged; requires line slices (≤200 lines)`;
+        }
+      }
+    }
+
+    async function changeCutoff(newVal) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+        const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
+        const cutoffBytes = newVal === '0' || newVal === 0 ? 0 : parseInt(newVal, 10);
+
+        const res = await apiFetch('/api/cutoff', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cutoff: cutoffBytes, sessionId: targetSessionId })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        refreshData(true);
+      } catch (err) {
+        alert("Failed to update cutoff: " + err.message);
+      }
     }
 
     async function refreshData(manual = false) {
@@ -319,11 +393,11 @@
         const statsRes = await apiFetch(statsUrl, { method: 'GET' });
         if (!statsRes.ok) throw new Error(`Stats HTTP ${statsRes.status}`);
         const s = await statsRes.json();
+        cachedStats = s;
 
-        // Update cutoff and sandbox cap
-        if (s.cutoffBytes) {
-          document.getElementById('cutoff-pill').innerText = formatBytes(s.cutoffBytes);
-        }
+        // Update cutoff dropdown
+        updateCutoffDropdown(s);
+
         if (s.sandboxCapBytes) {
           document.getElementById('sandbox-cap').innerText = formatBytes(s.sandboxCapBytes) + " preview";
         }
@@ -446,19 +520,36 @@
       }
     }
 
-    async function purgeSession() {
-      if (!confirm("Purge current session's indexed chunks and journal?")) return;
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
-        await apiFetch('/api/purge', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scope: 'session', sessionId: convId || undefined })
-        });
-        refreshData(true);
-      } catch (err) {
-        alert("Purge failed: " + err.message);
+    async function handlePurgeClick() {
+      const params = new URLSearchParams(window.location.search);
+      const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+
+      if (currentScope === 'all') {
+        const confirmed = confirm("Are you sure you want to reset all lifetime telemetry and index statistics across all sessions? This action cannot be undone.");
+        if (!confirmed) return;
+        try {
+          await apiFetch('/api/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scope: 'all' })
+          });
+          refreshData(true);
+        } catch (err) {
+          alert("Reset failed: " + err.message);
+        }
+      } else {
+        const confirmed = confirm("Purge current session's indexed chunks and journal?");
+        if (!confirmed) return;
+        try {
+          await apiFetch('/api/purge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ scope: 'session', sessionId: convId || undefined })
+          });
+          refreshData(true);
+        } catch (err) {
+          alert("Purge failed: " + err.message);
+        }
       }
     }
 
