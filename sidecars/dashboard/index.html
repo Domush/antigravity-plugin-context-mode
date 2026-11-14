@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Context Mode Dashboard</title>
+  <script src="/preload.js"></script>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     body {
@@ -21,6 +22,13 @@
       background: rgba(255, 255, 255, 0.12);
       border-radius: 4px;
     }
+    .spinning {
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
 <body class="p-3 sm:p-5 select-none custom-scrollbar">
@@ -29,7 +37,7 @@
   <div class="max-w-4xl mx-auto bg-[#131522] border border-white/[0.08] rounded-2xl p-4 sm:p-6 shadow-2xl space-y-4">
     
     <!-- Top Header -->
-    <div class="flex items-center justify-between pb-4 border-b border-white/[0.08]">
+    <div class="flex items-center justify-between pb-4 border-b border-white/[0.08] flex-wrap gap-3">
       <div class="flex items-center gap-3.5">
         <div class="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shadow-[0_0_18px_rgba(99,102,241,0.3)]">
           <svg class="w-5 h-5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -43,18 +51,39 @@
               <span class="w-1.5 h-1.5 rounded-full bg-[#00e599] animate-pulse"></span> Active
             </span>
           </div>
-          <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5">SQLite FTS5 Reciprocal Rank Fusion & Sandbox Execution</p>
+          <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5">SQLite FTS5 Reciprocal Rank Fusion &amp; Sandbox Execution</p>
         </div>
       </div>
       
-      <div class="flex items-center gap-2">
-        <div class="px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/10 text-xs text-slate-400 font-mono">
+      <div class="flex items-center gap-2 flex-wrap">
+        <!-- Scope Toggle -->
+        <div class="flex bg-black/40 border border-white/10 rounded-lg p-0.5 text-[11px] font-mono">
+          <button id="scope-session-btn" onclick="setScope('session')" class="px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition">
+            Session
+          </button>
+          <button id="scope-all-btn" onclick="setScope('all')" class="px-2 py-1 rounded text-slate-400 hover:text-white transition">
+            Lifetime
+          </button>
+        </div>
+
+        <div class="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] text-slate-400 font-mono">
           Cutoff: <span id="cutoff-pill" class="text-indigo-300 font-semibold">8 KB</span>
         </div>
-        <button onclick="refreshData()" class="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition" title="Refresh Telemetry">
-          ↻
+        
+        <button id="refresh-btn" onclick="refreshData(true)" class="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition flex items-center justify-center" title="Refresh Telemetry">
+          <svg id="refresh-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
         </button>
       </div>
+    </div>
+
+    <!-- Live Telemetry Status Banner -->
+    <div id="telemetry-banner" class="flex justify-between items-center text-[10px] text-slate-400 font-mono px-1">
+      <span id="telemetry-source" class="flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Live Telemetry Connected
+      </span>
+      <span id="last-updated-text">Updating...</span>
     </div>
 
     <!-- Top 4 Metric Cards (2x2 Grid) -->
@@ -63,7 +92,7 @@
       <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
         <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Reduction Rate</div>
         <div class="mt-2 flex items-baseline gap-1.5">
-          <span id="reduction-rate" class="text-3xl font-extrabold text-[#00e599] font-mono tracking-tight">99.2%</span>
+          <span id="reduction-rate" class="text-3xl font-extrabold text-[#00e599] font-mono tracking-tight">--%</span>
           <span class="text-xs font-semibold text-[#00e599]/90">saved</span>
         </div>
         <div class="mt-2 text-[11px] text-slate-400">Tokens diverted from LLM</div>
@@ -73,10 +102,10 @@
       <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
         <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Tokens Preserved</div>
         <div class="mt-2">
-          <span id="tokens-preserved" class="text-3xl font-extrabold text-[#818cf8] font-mono tracking-tight">~16,448</span>
+          <span id="tokens-preserved" class="text-3xl font-extrabold text-[#818cf8] font-mono tracking-tight">~--</span>
         </div>
         <div class="mt-2 text-[11px] text-slate-400">
-          <span id="kept-out-kb" class="font-medium">64.3 KB</span> kept out of prompt
+          <span id="kept-out-kb" class="font-medium text-slate-300">-- KB</span> kept out of prompt
         </div>
       </div>
 
@@ -84,9 +113,9 @@
       <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
         <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Data Throughput</div>
         <div class="mt-2 flex items-baseline gap-2 flex-wrap font-mono">
-          <span id="total-raw" class="text-2xl font-extrabold text-white">64.8 KB</span>
+          <span id="total-raw" class="text-2xl font-extrabold text-white">-- KB</span>
           <span class="text-slate-500 font-bold">→</span>
-          <span id="total-returned" class="text-2xl font-extrabold text-cyan-400">550 B</span>
+          <span id="total-returned" class="text-2xl font-extrabold text-cyan-400">-- B</span>
         </div>
         <div class="mt-2 text-[11px] text-slate-400">Raw log vs Context payload</div>
       </div>
@@ -95,8 +124,8 @@
       <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
         <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">FTS5 Chunks Indexed</div>
         <div class="mt-2 flex items-baseline gap-1.5 font-mono">
-          <span id="chunks-count" class="text-3xl font-extrabold text-purple-400">18</span>
-          <span id="sources-count" class="text-xs text-slate-400 font-sans">in 2 sources</span>
+          <span id="chunks-count" class="text-3xl font-extrabold text-purple-400">--</span>
+          <span id="sources-count" class="text-xs text-slate-400 font-sans">in -- sources</span>
         </div>
         <div class="mt-2 text-[11px] text-slate-400">Porter BM25 + Trigram RRF</div>
       </div>
@@ -106,14 +135,14 @@
     <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3.5">
       <div class="flex justify-between items-center">
         <span class="text-xs font-bold text-slate-200">Prompt Payload Comparison</span>
-        <span id="comparison-badge" class="text-xs font-mono font-semibold text-[#00e599]">99.2% smaller in context</span>
+        <span id="comparison-badge" class="text-xs font-mono font-semibold text-[#00e599]">Calculating...</span>
       </div>
 
       <!-- Raw Dump Bar -->
       <div>
         <div class="flex justify-between text-[11px] font-mono mb-1.5 text-slate-300">
           <span>Without Context Mode (Raw Dump)</span>
-          <span id="bar-raw-label" class="text-slate-400">64.8 KB (100%)</span>
+          <span id="bar-raw-label" class="text-slate-400">-- KB (100%)</span>
         </div>
         <div class="w-full h-2.5 rounded-full bg-[#23273c] overflow-hidden">
           <div id="bar-raw-fill" class="h-full rounded-full bg-[#f43f5e] transition-all duration-500" style="width: 100%;"></div>
@@ -124,10 +153,10 @@
       <div>
         <div class="flex justify-between text-[11px] font-mono mb-1.5 text-slate-300">
           <span>With Context Mode (Sandboxed Slice)</span>
-          <span id="bar-returned-label" class="text-[#00e599]">550 B (0.8%)</span>
+          <span id="bar-returned-label" class="text-[#00e599]">-- B (0%)</span>
         </div>
         <div class="w-full h-2.5 rounded-full bg-[#23273c] overflow-hidden">
-          <div id="bar-returned-fill" class="h-full rounded-full bg-[#00e599] transition-all duration-500" style="width: 0.8%; min-width: 8px;"></div>
+          <div id="bar-returned-fill" class="h-full rounded-full bg-[#00e599] transition-all duration-500" style="width: 0.8%; min-width: 6px;"></div>
         </div>
       </div>
     </div>
@@ -241,16 +270,54 @@
   </div>
 
   <script>
-    function formatBytes(bytes) {
-      if (!bytes || bytes === 0) return "0 B";
-      if (bytes < 1024) return bytes + " B";
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
-      return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    let currentScope = 'session';
+
+    function setScope(scope) {
+      currentScope = scope;
+      const sessionBtn = document.getElementById('scope-session-btn');
+      const allBtn = document.getElementById('scope-all-btn');
+      if (scope === 'session') {
+        sessionBtn.className = 'px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition';
+        allBtn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
+      } else {
+        allBtn.className = 'px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition';
+        sessionBtn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
+      }
+      refreshData(true);
     }
 
-    async function refreshData() {
+    function formatBytes(bytes) {
+      const b = Number(bytes || 0);
+      if (b <= 0) return "0 B";
+      if (b < 1024) return b + " B";
+      if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+      return (b / (1024 * 1024)).toFixed(2) + " MB";
+    }
+
+    async function apiFetch(path, options = {}) {
+      if (window.sidecar && typeof window.sidecar.fetch === 'function') {
+        return window.sidecar.fetch(path, options);
+      }
+      return fetch(path, options);
+    }
+
+    async function refreshData(manual = false) {
+      const refreshIcon = document.getElementById('refresh-icon');
+      if (manual && refreshIcon) refreshIcon.classList.add('spinning');
+
       try {
-        const statsRes = await fetch('/api/stats');
+        const params = new URLSearchParams(window.location.search);
+        const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+        
+        let statsUrl = '/api/stats';
+        if (currentScope === 'all') {
+          statsUrl += '?sessionId=all';
+        } else if (convId) {
+          statsUrl += `?sessionId=${encodeURIComponent(convId)}`;
+        }
+
+        const statsRes = await apiFetch(statsUrl, { method: 'GET' });
+        if (!statsRes.ok) throw new Error(`Stats HTTP ${statsRes.status}`);
         const s = await statsRes.json();
 
         // Update cutoff and sandbox cap
@@ -261,32 +328,32 @@
           document.getElementById('sandbox-cap').innerText = formatBytes(s.sandboxCapBytes) + " preview";
         }
 
-        // If telemetry exists in session, display actual numbers
-        if (s.totalRawBytes > 0) {
-          const rate = s.savingsPercent.toFixed(1) + "%";
-          document.getElementById('reduction-rate').innerText = rate;
-          document.getElementById('tokens-preserved').innerText = "~" + (s.tokensKeptOut || 0).toLocaleString();
-          document.getElementById('kept-out-kb').innerText = formatBytes(s.keptOutBytes);
-          document.getElementById('total-raw').innerText = formatBytes(s.totalRawBytes);
-          document.getElementById('total-returned').innerText = formatBytes(s.totalReturnedBytes);
-          document.getElementById('chunks-count').innerText = s.chunksCount;
-          document.getElementById('sources-count').innerText = `in ${s.sourcesCount} ${s.sourcesCount === 1 ? 'source' : 'sources'}`;
+        const totalRaw = Number(s.totalRawBytes || 0);
+        const totalRet = Number(s.totalReturnedBytes || 0);
+        const keptOut = Number(s.keptOutBytes !== undefined ? s.keptOutBytes : Math.max(0, totalRaw - totalRet));
+        const rawRate = totalRaw > 0 ? ((keptOut / totalRaw) * 100) : Number(s.savingsPercent || 0);
+        const rateStr = rawRate.toFixed(1) + "%";
+        const tokensPreserved = Number(s.tokensKeptOut !== undefined ? s.tokensKeptOut : Math.round(keptOut / 4));
+        const chunks = Number(s.chunksCount || 0);
+        const sources = Number(s.sourcesCount || 0);
 
-          document.getElementById('comparison-badge').innerText = `${rate} smaller in context`;
-          document.getElementById('bar-raw-label').innerText = `${formatBytes(s.totalRawBytes)} (100%)`;
+        // Update top 4 cards
+        document.getElementById('reduction-rate').innerText = rateStr;
+        document.getElementById('tokens-preserved').innerText = "~" + tokensPreserved.toLocaleString();
+        document.getElementById('kept-out-kb').innerText = formatBytes(keptOut);
+        document.getElementById('total-raw').innerText = formatBytes(totalRaw);
+        document.getElementById('total-returned').innerText = formatBytes(totalRet);
+        document.getElementById('chunks-count').innerText = chunks;
+        document.getElementById('sources-count').innerText = `in ${sources} ${sources === 1 ? 'source' : 'sources'}`;
 
-          const pctReturned = ((s.totalReturnedBytes / s.totalRawBytes) * 100).toFixed(1);
-          document.getElementById('bar-returned-label').innerText = `${formatBytes(s.totalReturnedBytes)} (${pctReturned}%)`;
-          document.getElementById('bar-returned-fill').style.width = Math.max(0.8, pctReturned) + "%";
+        // Update Payload Comparison
+        if (totalRaw > 0) {
+          document.getElementById('comparison-badge').innerText = `${rateStr} smaller in context`;
+          document.getElementById('bar-raw-label').innerText = `${formatBytes(totalRaw)} (100%)`;
+          const pctReturned = ((totalRet / totalRaw) * 100);
+          document.getElementById('bar-returned-label').innerText = `${formatBytes(totalRet)} (${pctReturned.toFixed(1)}%)`;
+          document.getElementById('bar-returned-fill').style.width = Math.max(0.8, Math.min(100, pctReturned)) + "%";
         } else {
-          // If no raw activity yet in this session, show clean ready state
-          document.getElementById('reduction-rate').innerText = "0.0%";
-          document.getElementById('tokens-preserved').innerText = "~0";
-          document.getElementById('kept-out-kb').innerText = "0 B";
-          document.getElementById('total-raw').innerText = "0 B";
-          document.getElementById('total-returned').innerText = "0 B";
-          document.getElementById('chunks-count').innerText = s.chunksCount || "0";
-          document.getElementById('sources-count').innerText = `in ${s.sourcesCount || 0} sources`;
           document.getElementById('comparison-badge').innerText = "Standby (Ready)";
           document.getElementById('bar-raw-label').innerText = "0 B (100%)";
           document.getElementById('bar-returned-label').innerText = "0 B (0%)";
@@ -295,30 +362,54 @@
 
         // Doctor health
         try {
-          const docRes = await fetch('/api/doctor');
-          const d = await docRes.json();
-          if (d.status) {
-            document.getElementById('doctor-status').innerText = d.status;
+          const docRes = await apiFetch('/api/doctor', { method: 'GET' });
+          if (docRes.ok) {
+            const d = await docRes.json();
+            if (d.status) {
+              document.getElementById('doctor-status').innerText = d.status;
+            }
           }
         } catch {}
 
         // Recent sources
-        const resumeRes = await fetch('/api/resume');
-        const r = await resumeRes.json();
-        const sourcesDiv = document.getElementById('sources-list');
-
-        if (r.recentSources && r.recentSources.length > 0) {
-          sourcesDiv.innerHTML = r.recentSources.map(src => `
-            <div class="p-2 rounded bg-black/40 border border-white/5 flex justify-between items-center">
-              <span class="truncate max-w-[220px] text-slate-300 font-medium" title="${src.label}">${src.label}</span>
-              <span class="text-indigo-400 text-xs">${formatBytes(src.bytes_total)} <span class="text-slate-500">(${src.chunk_count} chunks)</span></span>
-            </div>
-          `).join('');
-        } else {
-          sourcesDiv.innerHTML = '<div class="text-slate-500 italic">No indexed sources in current session</div>';
+        let resumeUrl = '/api/resume';
+        if (convId && currentScope === 'session') {
+          resumeUrl += `?sessionId=${encodeURIComponent(convId)}`;
         }
+        const resumeRes = await apiFetch(resumeUrl, { method: 'GET' });
+        if (resumeRes.ok) {
+          const r = await resumeRes.json();
+          const sourcesDiv = document.getElementById('sources-list');
+
+          if (r.recentSources && r.recentSources.length > 0) {
+            sourcesDiv.innerHTML = r.recentSources.map(src => `
+              <div class="p-2 rounded bg-black/40 border border-white/5 flex justify-between items-center">
+                <span class="truncate max-w-[220px] text-slate-300 font-medium" title="${src.label}">${src.label}</span>
+                <span class="text-indigo-400 text-xs">${formatBytes(src.bytes_total)} <span class="text-slate-500">(${src.chunk_count} chunks)</span></span>
+              </div>
+            `).join('');
+          } else {
+            sourcesDiv.innerHTML = '<div class="text-slate-500 italic">No indexed sources in current view</div>';
+          }
+        }
+
+        // Update timestamp
+        const now = new Date();
+        document.getElementById('last-updated-text').innerText = `Updated ${now.toLocaleTimeString()}`;
+        document.getElementById('telemetry-source').innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live Telemetry (${currentScope.toUpperCase()})
+        `;
+
       } catch (err) {
-        console.error("Failed to refresh telemetry:", err);
+        console.error("Telemetry refresh failed:", err);
+        document.getElementById('last-updated-text').innerText = `Error: ${err.message}`;
+        document.getElementById('telemetry-source').innerHTML = `
+          <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Disconnected
+        `;
+      } finally {
+        if (refreshIcon) {
+          setTimeout(() => refreshIcon.classList.remove('spinning'), 400);
+        }
       }
     }
 
@@ -330,7 +421,7 @@
       resultsDiv.innerHTML = '<div class="text-slate-400 italic text-xs">Searching SQLite FTS5...</div>';
 
       try {
-        const res = await fetch('/api/search', {
+        const res = await apiFetch('/api/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ query: q })
@@ -358,20 +449,22 @@
     async function purgeSession() {
       if (!confirm("Purge current session's indexed chunks and journal?")) return;
       try {
-        await fetch('/api/purge', {
+        const params = new URLSearchParams(window.location.search);
+        const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+        await apiFetch('/api/purge', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ scope: 'session' })
+          body: JSON.stringify({ scope: 'session', sessionId: convId || undefined })
         });
-        refreshData();
+        refreshData(true);
       } catch (err) {
         alert("Purge failed: " + err.message);
       }
     }
 
-    // Auto-refresh every 3.5 seconds
-    refreshData();
-    setInterval(refreshData, 3500);
+    // Auto-refresh polling every 3 seconds
+    refreshData(true);
+    setInterval(() => refreshData(false), 3000);
   </script>
 </body>
 </html>
