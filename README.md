@@ -10,6 +10,7 @@
 **Antigravity Context Mode** is a free, local-first plugin built specifically for the **Google Antigravity App**. It prevents terminal commands, build logs, and multi-megabyte files from flooding your conversation history, saving thousands of tokens per turn and stopping "agent amnesia" in its tracks.
 
 ---
+<img width="962" height="812" alt="image" src="https://github.com/user-attachments/assets/873f818d-3bd9-4746-94a9-fc182a174efb" />
 
 ## ⚡ The Problem: Context Window Bloat
 
