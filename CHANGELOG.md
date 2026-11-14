@@ -2,6 +2,11 @@
 
 All notable changes to `antigravity-plugin-context-mode` will be documented in this file.
 
+## [1.0.1] - 2026-11-14
+
+### Added
+- Added screenshot of sidecar dashboard to README.md
+
 ## [1.0.0] - 2026-11-14
 
 ### Added
