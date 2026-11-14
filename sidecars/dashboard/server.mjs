@@ -57,14 +57,16 @@ if (isSidecarEnv) {
     return stats;
   }, "GET");
 
-  app.api("/api/cutoff", (data) => {
+  const handleCutoff = (data) => {
     const sessionId = data.sessionId || app.config.conversationId || null;
     const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
     const saved = store.setCutoff(cutoffBytes, sessionId);
     return { ok: true, cutoffBytes: saved, sessionId };
-  }, "POST");
+  };
+  app.api("/api/cutoff", handleCutoff, "GET");
+  app.api("/api/cutoff", handleCutoff, "POST");
 
-  app.api("/api/exemptions", (data) => {
+  const handleExemptions = (data) => {
     const sessionId = data.sessionId || app.config.conversationId || null;
     const action = data.action || "get";
     let list;
@@ -80,7 +82,9 @@ if (isSidecarEnv) {
       list = store.getExemptExtensions(sessionId);
     }
     return { ok: true, exemptExtensions: list, sessionId };
-  }, "POST");
+  };
+  app.api("/api/exemptions", handleExemptions, "GET");
+  app.api("/api/exemptions", handleExemptions, "POST");
 
   app.api("/api/doctor", () => {
     return store.doctor();
@@ -91,15 +95,19 @@ if (isSidecarEnv) {
     return store.getResumeState(sessionId, 10);
   }, "GET");
 
-  app.api("/api/search", (data) => {
+  const handleSearch = (data) => {
     const queries = Array.isArray(data.queries) ? data.queries : [data.query || ""];
     return store.search({ queries, limit: 5 });
-  }, "POST");
+  };
+  app.api("/api/search", handleSearch, "GET");
+  app.api("/api/search", handleSearch, "POST");
 
-  app.api("/api/purge", (data) => {
+  const handlePurge = (data) => {
     const sessionId = data.sessionId || app.config.conversationId || "default";
     return store.purge({ scope: data.scope || "session", sessionId });
-  }, "POST");
+  };
+  app.api("/api/purge", handlePurge, "GET");
+  app.api("/api/purge", handlePurge, "POST");
 
   await app.run();
   console.log(`[context-mode sidecar] registered and running`);
@@ -134,52 +142,66 @@ if (isSidecarEnv) {
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/exemptions") {
-      let body = "";
-      req.on("data", (c) => (body += c));
-      req.on("end", () => {
-        try {
-          const data = JSON.parse(body || "{}");
-          const sessionId = data.sessionId || null;
-          const action = data.action || "get";
-          let list;
-          if (action === "add" && data.ext) {
-            list = store.addExemptExtension(data.ext, sessionId);
-          } else if (action === "remove" && data.ext) {
-            list = store.removeExemptExtension(data.ext, sessionId);
-          } else if (action === "set" && Array.isArray(data.extensions)) {
-            list = store.setExemptExtensions(data.extensions, sessionId);
-          } else if (action === "reset") {
-            list = store.setExemptExtensions(null, sessionId);
-          } else {
-            list = store.getExemptExtensions(sessionId);
+    if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/cutoff") {
+      const handleCutoffReq = (data) => {
+        const sessionId = data.sessionId || null;
+        const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
+        const saved = store.setCutoff(cutoffBytes, sessionId);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, cutoffBytes: saved, sessionId }));
+      };
+      if (req.method === "GET") {
+        const data = Object.fromEntries(url.searchParams.entries());
+        handleCutoffReq(data);
+      } else {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          try {
+            handleCutoffReq(JSON.parse(body || "{}"));
+          } catch (e) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e.message }));
           }
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, exemptExtensions: list, sessionId }));
-        } catch (e) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: e.message }));
-        }
-      });
+        });
+      }
       return;
     }
 
-    if (req.method === "POST" && url.pathname === "/api/cutoff") {
-      let body = "";
-      req.on("data", (c) => (body += c));
-      req.on("end", () => {
-        try {
-          const data = JSON.parse(body || "{}");
-          const sessionId = data.sessionId || null;
-          const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
-          const saved = store.setCutoff(cutoffBytes, sessionId);
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ ok: true, cutoffBytes: saved, sessionId }));
-        } catch (e) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: e.message }));
+    if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/exemptions") {
+      const handleExemptReq = (data) => {
+        const sessionId = data.sessionId || null;
+        const action = data.action || "get";
+        let list;
+        if (action === "add" && data.ext) {
+          list = store.addExemptExtension(data.ext, sessionId);
+        } else if (action === "remove" && data.ext) {
+          list = store.removeExemptExtension(data.ext, sessionId);
+        } else if (action === "set" && Array.isArray(data.extensions)) {
+          list = store.setExemptExtensions(data.extensions, sessionId);
+        } else if (action === "reset") {
+          list = store.setExemptExtensions(null, sessionId);
+        } else {
+          list = store.getExemptExtensions(sessionId);
         }
-      });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, exemptExtensions: list, sessionId }));
+      };
+      if (req.method === "GET") {
+        const data = Object.fromEntries(url.searchParams.entries());
+        handleExemptReq(data);
+      } else {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          try {
+            handleExemptReq(JSON.parse(body || "{}"));
+          } catch (e) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+      }
       return;
     }
 

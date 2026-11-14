@@ -358,10 +358,28 @@
     }
 
     async function apiFetch(path, options = {}) {
-      if (window.sidecar && typeof window.sidecar.fetch === 'function') {
-        return window.sidecar.fetch(path, options);
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+
+      let finalUrl = path;
+      if (token && !finalUrl.includes('token=')) {
+        const sep = finalUrl.includes('?') ? '&' : '?';
+        finalUrl += `${sep}token=${encodeURIComponent(token)}`;
       }
-      return fetch(path, options);
+
+      const headers = new Headers(options.headers || {});
+      if (token && !headers.has('X-Sidecar-Token')) {
+        headers.set('X-Sidecar-Token', token);
+      }
+
+      if (window.sidecar && typeof window.sidecar.fetch === 'function') {
+        try {
+          return await window.sidecar.fetch(finalUrl, { ...options, headers });
+        } catch (e) {
+          // Fall through to native fetch
+        }
+      }
+      return fetch(finalUrl, { ...options, headers });
     }
 
     function updateCutoffDropdown(s) {
@@ -400,15 +418,30 @@
         const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
         const cutoffBytes = newVal === '0' || newVal === 0 ? 0 : parseInt(newVal, 10);
 
-        const res = await apiFetch('/api/cutoff', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cutoff: cutoffBytes, sessionId: targetSessionId })
-        });
+        // Optimistically update UI immediately
+        const cutoffSelect = document.getElementById('cutoff-select');
+        if (cutoffSelect) cutoffSelect.value = String(cutoffBytes);
+        const gateReadCutoff = document.getElementById('gate-read-cutoff');
+        if (gateReadCutoff) {
+          if (cutoffBytes === 0) {
+            gateReadCutoff.innerText = 'Cutoff disabled (all file sizes allowed un-paged)';
+          } else {
+            gateReadCutoff.innerText = `Blocks files >${formatBytes(cutoffBytes)} un-paged; requires line slices (≤200 lines)`;
+          }
+        }
+        if (cachedStats) {
+          if (currentScope === 'all') {
+            cachedStats.globalCutoffBytes = cutoffBytes;
+          } else {
+            cachedStats.cutoffBytes = cutoffBytes;
+          }
+        }
+
+        const queryUrl = `/api/cutoff?cutoff=${encodeURIComponent(cutoffBytes)}&sessionId=${encodeURIComponent(targetSessionId)}`;
+        const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        refreshData(true);
       } catch (err) {
-        alert("Failed to update cutoff: " + err.message);
+        console.error("Failed to update cutoff:", err);
       }
     }
 
@@ -441,11 +474,8 @@
       const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
 
       try {
-        const res = await apiFetch('/api/exemptions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'add', ext: val, sessionId: targetSessionId })
-        });
+        const queryUrl = `/api/exemptions?action=add&ext=${encodeURIComponent(val)}&sessionId=${encodeURIComponent(targetSessionId)}`;
+        const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         input.value = '';
         refreshData(true);
@@ -460,11 +490,8 @@
       const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
 
       try {
-        const res = await apiFetch('/api/exemptions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'remove', ext, sessionId: targetSessionId })
-        });
+        const queryUrl = `/api/exemptions?action=remove&ext=${encodeURIComponent(ext)}&sessionId=${encodeURIComponent(targetSessionId)}`;
+        const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         refreshData(true);
       } catch (err) {
@@ -479,11 +506,8 @@
       const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
 
       try {
-        const res = await apiFetch('/api/exemptions', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'reset', sessionId: targetSessionId })
-        });
+        const queryUrl = `/api/exemptions?action=reset&sessionId=${encodeURIComponent(targetSessionId)}`;
+        const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         refreshData(true);
       } catch (err) {

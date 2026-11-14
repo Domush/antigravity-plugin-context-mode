@@ -7,9 +7,11 @@ import os from "node:os";
 
 function runHook(hookPath, stdinJson, env = {}) {
   return new Promise((resolve, reject) => {
+    const childEnv = { ...process.env, ...env };
+    delete childEnv.ANTIGRAVITY_CONVERSATION_ID;
     const child = spawn(process.execPath, [hookPath], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, ...env }
+      env: childEnv
     });
 
     let stdout = "";
