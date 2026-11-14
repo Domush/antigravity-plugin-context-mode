@@ -2,12 +2,67 @@ import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
 import os from "node:os";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ContextModeStore } from "../../lib/store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const store = new ContextModeStore();
 const HTML_FILE = path.join(__dirname, "index.html");
+
+let appStartTime = null;
+try {
+  const out = execSync(
+    'powershell -NoProfile -Command "(Get-Process -Name language_server, Antigravity | Measure-Object -Property StartTime -Minimum).Minimum.ToUniversalTime().ToString(\'yyyy-MM-ddTHH:mm:ss.fffZ\')"',
+    { encoding: "utf8", timeout: 3000 }
+  );
+  const ts = new Date(out.trim()).getTime();
+  if (!Number.isNaN(ts) && ts > 0) appStartTime = ts;
+} catch {}
+if (!appStartTime) {
+  appStartTime = Date.now() - Math.round(process.uptime() * 1000);
+}
+
+function resolveTargetSession(data, defaultConvId = "default") {
+  const scope = data.scope || (data.sessionId === "all" ? "lifetime" : (data.sessionId === "app" ? "app" : "conversation"));
+  const convId = data.conversationId || (data.sessionId !== "all" && data.sessionId !== "app" && data.sessionId ? data.sessionId : (defaultConvId || "default"));
+  let targetSid = convId;
+  if (scope === "lifetime" || scope === "all") targetSid = "all";
+  else if (scope === "app" || scope === "session") targetSid = "app";
+  return { scope, convId, targetSid };
+}
+
+function getStatsPayload(data, defaultConvId = "default") {
+  const { scope, convId, targetSid } = resolveTargetSession(data, defaultConvId);
+  let stats;
+  if (scope === "lifetime" || scope === "all") {
+    stats = store.getStats("all");
+  } else if (scope === "app" || scope === "session") {
+    stats = store.getStats("app", { sinceTs: appStartTime });
+  } else {
+    stats = store.getStats(convId);
+  }
+
+  stats.scope = scope;
+  stats.conversationId = convId;
+  stats.appStartTime = appStartTime;
+  stats.conversationCutoffBytes = store.getCutoff(convId);
+  stats.appCutoffBytes = store.getCutoff("app");
+  stats.globalCutoffBytes = store.getCutoff(null);
+  stats.cutoffBytes = scope === "lifetime"
+    ? stats.globalCutoffBytes
+    : (scope === "app" ? stats.appCutoffBytes : stats.conversationCutoffBytes);
+
+  stats.conversationExemptExtensions = store.getExemptExtensions(convId);
+  stats.appExemptExtensions = store.getExemptExtensions("app");
+  stats.globalExemptExtensions = store.getExemptExtensions(null);
+  stats.exemptExtensions = scope === "lifetime"
+    ? stats.globalExemptExtensions
+    : (scope === "app" ? stats.appExemptExtensions : stats.conversationExemptExtensions);
+
+  stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
+  return stats;
+}
 
 let SidecarApp = null;
 let ResponseClass = null;
@@ -41,47 +96,34 @@ if (isSidecarEnv) {
   });
 
   app.api("/api/stats", (data) => {
-    const sessionId = data.sessionId || app.config.conversationId || "default";
-    let stats = store.getStats(sessionId);
-    if (!stats.calls && !stats.sourcesCount && sessionId !== "default" && sessionId !== "all") {
-      const defStats = store.getStats("default");
-      if (defStats.calls || defStats.sourcesCount) {
-        stats = defStats;
-      }
-    }
-    stats.cutoffBytes = store.getCutoff(sessionId);
-    stats.globalCutoffBytes = store.getCutoff(null);
-    stats.exemptExtensions = store.getExemptExtensions(sessionId);
-    stats.globalExemptExtensions = store.getExemptExtensions(null);
-    stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
-    return stats;
+    return getStatsPayload(data, app.config.conversationId);
   }, "GET");
 
   const handleCutoff = (data) => {
-    const sessionId = data.sessionId || app.config.conversationId || null;
+    const { scope, targetSid } = resolveTargetSession(data, app.config.conversationId);
     const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
-    const saved = store.setCutoff(cutoffBytes, sessionId);
-    return { ok: true, cutoffBytes: saved, sessionId };
+    const saved = store.setCutoff(cutoffBytes, targetSid);
+    return { ok: true, cutoffBytes: saved, scope, sessionId: targetSid };
   };
   app.api("/api/cutoff", handleCutoff, "GET");
   app.api("/api/cutoff", handleCutoff, "POST");
 
   const handleExemptions = (data) => {
-    const sessionId = data.sessionId || app.config.conversationId || null;
+    const { scope, targetSid } = resolveTargetSession(data, app.config.conversationId);
     const action = data.action || "get";
     let list;
     if (action === "add" && data.ext) {
-      list = store.addExemptExtension(data.ext, sessionId);
+      list = store.addExemptExtension(data.ext, targetSid);
     } else if (action === "remove" && data.ext) {
-      list = store.removeExemptExtension(data.ext, sessionId);
+      list = store.removeExemptExtension(data.ext, targetSid);
     } else if (action === "set" && Array.isArray(data.extensions)) {
-      list = store.setExemptExtensions(data.extensions, sessionId);
+      list = store.setExemptExtensions(data.extensions, targetSid);
     } else if (action === "reset") {
-      list = store.setExemptExtensions(null, sessionId);
+      list = store.setExemptExtensions(null, targetSid);
     } else {
-      list = store.getExemptExtensions(sessionId);
+      list = store.getExemptExtensions(targetSid);
     }
-    return { ok: true, exemptExtensions: list, sessionId };
+    return { ok: true, exemptExtensions: list, scope, sessionId: targetSid };
   };
   app.api("/api/exemptions", handleExemptions, "GET");
   app.api("/api/exemptions", handleExemptions, "POST");
@@ -90,10 +132,17 @@ if (isSidecarEnv) {
     return store.doctor();
   }, "GET");
 
-  app.api("/api/resume", (data) => {
-    const sessionId = data.sessionId || app.config.conversationId || "default";
-    return store.getResumeState(sessionId, 10);
-  }, "GET");
+  const handleResume = (data) => {
+    const { scope, convId } = resolveTargetSession(data, app.config.conversationId);
+    if (scope === "lifetime" || scope === "all") {
+      return store.getResumeState("all", 10);
+    } else if (scope === "app" || scope === "session") {
+      return store.getResumeState("app", 10, { sinceTs: appStartTime });
+    } else {
+      return store.getResumeState(convId, 10);
+    }
+  };
+  app.api("/api/resume", handleResume, "GET");
 
   const handleSearch = (data) => {
     const queries = Array.isArray(data.queries) ? data.queries : [data.query || ""];
@@ -103,8 +152,14 @@ if (isSidecarEnv) {
   app.api("/api/search", handleSearch, "POST");
 
   const handlePurge = (data) => {
-    const sessionId = data.sessionId || app.config.conversationId || "default";
-    return store.purge({ scope: data.scope || "session", sessionId });
+    const { scope, convId } = resolveTargetSession(data, app.config.conversationId);
+    if (scope === "lifetime" || scope === "all") {
+      return store.purge({ scope: "all" });
+    } else if (scope === "app" || scope === "session") {
+      return store.purge({ scope: "app", sinceTs: appStartTime });
+    } else {
+      return store.purge({ scope: "conversation", sessionId: convId });
+    }
   };
   app.api("/api/purge", handlePurge, "GET");
   app.api("/api/purge", handlePurge, "POST");
@@ -124,19 +179,8 @@ if (isSidecarEnv) {
     }
 
     if (req.method === "GET" && url.pathname === "/api/stats") {
-      const sessionId = url.searchParams.get("sessionId") || "default";
-      let stats = store.getStats(sessionId);
-      if (!stats.calls && !stats.sourcesCount && sessionId !== "default" && sessionId !== "all") {
-        const defStats = store.getStats("default");
-        if (defStats.calls || defStats.sourcesCount) {
-          stats = defStats;
-        }
-      }
-      stats.cutoffBytes = store.getCutoff(sessionId);
-      stats.globalCutoffBytes = store.getCutoff(null);
-      stats.exemptExtensions = store.getExemptExtensions(sessionId);
-      stats.globalExemptExtensions = store.getExemptExtensions(null);
-      stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
+      const data = Object.fromEntries(url.searchParams.entries());
+      const stats = getStatsPayload(data);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(stats));
       return;
@@ -144,11 +188,11 @@ if (isSidecarEnv) {
 
     if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/cutoff") {
       const handleCutoffReq = (data) => {
-        const sessionId = data.sessionId || null;
+        const { scope, targetSid } = resolveTargetSession(data);
         const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
-        const saved = store.setCutoff(cutoffBytes, sessionId);
+        const saved = store.setCutoff(cutoffBytes, targetSid);
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, cutoffBytes: saved, sessionId }));
+        res.end(JSON.stringify({ ok: true, cutoffBytes: saved, scope, sessionId: targetSid }));
       };
       if (req.method === "GET") {
         const data = Object.fromEntries(url.searchParams.entries());
@@ -170,22 +214,22 @@ if (isSidecarEnv) {
 
     if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/exemptions") {
       const handleExemptReq = (data) => {
-        const sessionId = data.sessionId || null;
+        const { scope, targetSid } = resolveTargetSession(data);
         const action = data.action || "get";
         let list;
         if (action === "add" && data.ext) {
-          list = store.addExemptExtension(data.ext, sessionId);
+          list = store.addExemptExtension(data.ext, targetSid);
         } else if (action === "remove" && data.ext) {
-          list = store.removeExemptExtension(data.ext, sessionId);
+          list = store.removeExemptExtension(data.ext, targetSid);
         } else if (action === "set" && Array.isArray(data.extensions)) {
-          list = store.setExemptExtensions(data.extensions, sessionId);
+          list = store.setExemptExtensions(data.extensions, targetSid);
         } else if (action === "reset") {
-          list = store.setExemptExtensions(null, sessionId);
+          list = store.setExemptExtensions(null, targetSid);
         } else {
-          list = store.getExemptExtensions(sessionId);
+          list = store.getExemptExtensions(targetSid);
         }
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, exemptExtensions: list, sessionId }));
+        res.end(JSON.stringify({ ok: true, exemptExtensions: list, scope, sessionId: targetSid }));
       };
       if (req.method === "GET") {
         const data = Object.fromEntries(url.searchParams.entries());
@@ -204,22 +248,35 @@ if (isSidecarEnv) {
       }
       return;
     }
-
-    if (req.method === "POST" && url.pathname === "/api/purge") {
-      let body = "";
-      req.on("data", (c) => (body += c));
-      req.on("end", () => {
-        try {
-          const data = JSON.parse(body || "{}");
-          const sessionId = data.sessionId || "default";
-          const result = store.purge({ scope: data.scope || "session", sessionId });
-          res.writeHead(200, { "Content-Type": "application/json" });
-          res.end(JSON.stringify(result));
-        } catch (e) {
-          res.writeHead(400, { "Content-Type": "application/json" });
-          res.end(JSON.stringify({ error: e.message }));
+    if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/purge") {
+      const handlePurgeReq = (data) => {
+        const { scope, convId } = resolveTargetSession(data);
+        let result;
+        if (scope === "lifetime" || scope === "all") {
+          result = store.purge({ scope: "all" });
+        } else if (scope === "app" || scope === "session") {
+          result = store.purge({ scope: "app", sinceTs: appStartTime });
+        } else {
+          result = store.purge({ scope: "conversation", sessionId: convId });
         }
-      });
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(result));
+      };
+      if (req.method === "GET") {
+        const data = Object.fromEntries(url.searchParams.entries());
+        handlePurgeReq(data);
+      } else {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          try {
+            handlePurgeReq(JSON.parse(body || "{}"));
+          } catch (e) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+      }
       return;
     }
 
@@ -230,9 +287,18 @@ if (isSidecarEnv) {
     }
 
     if (req.method === "GET" && url.pathname === "/api/resume") {
-      const sessionId = url.searchParams.get("sessionId") || "default";
+      const data = Object.fromEntries(url.searchParams.entries());
+      const { scope, convId } = resolveTargetSession(data);
+      let resume;
+      if (scope === "lifetime" || scope === "all") {
+        resume = store.getResumeState("all", 10);
+      } else if (scope === "app" || scope === "session") {
+        resume = store.getResumeState("app", 10, { sinceTs: appStartTime });
+      } else {
+        resume = store.getResumeState(convId, 10);
+      }
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(store.getResumeState(sessionId, 10)));
+      res.end(JSON.stringify(resume));
       return;
     }
 

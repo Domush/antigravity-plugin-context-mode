@@ -56,12 +56,15 @@
       </div>
       
       <div class="flex items-center gap-2 flex-wrap">
-        <!-- Scope Toggle -->
+        <!-- Scope Toggle (3-way) -->
         <div class="flex bg-black/40 border border-white/10 rounded-lg p-0.5 text-[11px] font-mono">
-          <button id="scope-session-btn" onclick="setScope('session')" class="px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition">
+          <button id="scope-conv-btn" onclick="setScope('conversation')" class="px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition" title="Active conversation metrics">
+            Conversation
+          </button>
+          <button id="scope-app-btn" onclick="setScope('app')" class="px-2 py-1 rounded text-slate-400 hover:text-white transition" title="Current app session (since restart)">
             Session
           </button>
-          <button id="scope-all-btn" onclick="setScope('all')" class="px-2 py-1 rounded text-slate-400 hover:text-white transition">
+          <button id="scope-lifetime-btn" onclick="setScope('lifetime')" class="px-2 py-1 rounded text-slate-400 hover:text-white transition" title="All-time cumulative metrics">
             Lifetime
           </button>
         </div>
@@ -316,26 +319,34 @@
   </div>
 
   <script>
-    let currentScope = 'session';
+    let currentScope = 'conversation';
     let cachedStats = null;
 
     function setScope(scope) {
       currentScope = scope;
-      const sessionBtn = document.getElementById('scope-session-btn');
-      const allBtn = document.getElementById('scope-all-btn');
+      const convBtn = document.getElementById('scope-conv-btn');
+      const appBtn = document.getElementById('scope-app-btn');
+      const lifetimeBtn = document.getElementById('scope-lifetime-btn');
       const purgeBtn = document.getElementById('purge-btn');
       const cutoffLabel = document.getElementById('cutoff-scope-label');
 
-      if (scope === 'session') {
-        sessionBtn.className = 'px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition';
-        allBtn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
-        purgeBtn.innerText = 'Purge Session';
-        purgeBtn.title = 'Clear indexed sources and events for current session';
+      const activeClass = 'px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition';
+      const inactiveClass = 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
+
+      if (convBtn) convBtn.className = scope === 'conversation' ? activeClass : inactiveClass;
+      if (appBtn) appBtn.className = scope === 'app' ? activeClass : inactiveClass;
+      if (lifetimeBtn) lifetimeBtn.className = scope === 'lifetime' ? activeClass : inactiveClass;
+
+      if (scope === 'conversation') {
+        purgeBtn.innerText = 'Clear Conversation';
+        purgeBtn.title = 'Clear indexed sources and events for current conversation';
         cutoffLabel.innerText = 'Cutoff:';
+      } else if (scope === 'app') {
+        purgeBtn.innerText = 'Clear Session';
+        purgeBtn.title = 'Clear indexed sources and events recorded since app restart';
+        cutoffLabel.innerText = 'Session Cutoff:';
       } else {
-        allBtn.className = 'px-2 py-1 rounded bg-indigo-600 text-white font-semibold transition';
-        sessionBtn.className = 'px-2 py-1 rounded text-slate-400 hover:text-white transition';
-        purgeBtn.innerText = 'Reset Lifetime Figures';
+        purgeBtn.innerText = 'Reset Lifetime';
         purgeBtn.title = 'Clear all stored sources, events, and metrics across all sessions';
         cutoffLabel.innerText = 'Global Cutoff:';
       }
@@ -384,9 +395,14 @@
 
     function updateCutoffDropdown(s) {
       const cutoffSelect = document.getElementById('cutoff-select');
-      const activeCutoff = currentScope === 'all' 
-        ? (s.globalCutoffBytes !== undefined ? s.globalCutoffBytes : 8192)
-        : (s.cutoffBytes !== undefined ? s.cutoffBytes : 8192);
+      let activeCutoff = 8192;
+      if (currentScope === 'lifetime') {
+        activeCutoff = s.globalCutoffBytes !== undefined ? s.globalCutoffBytes : 8192;
+      } else if (currentScope === 'app') {
+        activeCutoff = s.appCutoffBytes !== undefined ? s.appCutoffBytes : (s.globalCutoffBytes || 8192);
+      } else {
+        activeCutoff = s.conversationCutoffBytes !== undefined ? s.conversationCutoffBytes : (s.cutoffBytes || 8192);
+      }
 
       const targetVal = String(activeCutoff);
       let matched = false;
@@ -415,7 +431,6 @@
       try {
         const params = new URLSearchParams(window.location.search);
         const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
-        const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
         const cutoffBytes = newVal === '0' || newVal === 0 ? 0 : parseInt(newVal, 10);
 
         // Optimistically update UI immediately
@@ -430,14 +445,17 @@
           }
         }
         if (cachedStats) {
-          if (currentScope === 'all') {
+          if (currentScope === 'lifetime') {
             cachedStats.globalCutoffBytes = cutoffBytes;
+          } else if (currentScope === 'app') {
+            cachedStats.appCutoffBytes = cutoffBytes;
           } else {
+            cachedStats.conversationCutoffBytes = cutoffBytes;
             cachedStats.cutoffBytes = cutoffBytes;
           }
         }
 
-        const queryUrl = `/api/cutoff?cutoff=${encodeURIComponent(cutoffBytes)}&sessionId=${encodeURIComponent(targetSessionId)}`;
+        const queryUrl = `/api/cutoff?cutoff=${encodeURIComponent(cutoffBytes)}&scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
         const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
       } catch (err) {
@@ -448,9 +466,14 @@
     function updateExemptionsList(s) {
       const container = document.getElementById('exempt-tags');
       if (!container) return;
-      const list = currentScope === 'all'
-        ? (s.globalExemptExtensions || s.exemptExtensions || [])
-        : (s.exemptExtensions || []);
+      let list = [];
+      if (currentScope === 'lifetime') {
+        list = s.globalExemptExtensions || [];
+      } else if (currentScope === 'app') {
+        list = s.appExemptExtensions || s.globalExemptExtensions || [];
+      } else {
+        list = s.conversationExemptExtensions || s.exemptExtensions || [];
+      }
 
       if (list && list.length > 0) {
         container.innerHTML = list.map(ext => `
@@ -471,10 +494,9 @@
 
       const params = new URLSearchParams(window.location.search);
       const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
-      const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
 
       try {
-        const queryUrl = `/api/exemptions?action=add&ext=${encodeURIComponent(val)}&sessionId=${encodeURIComponent(targetSessionId)}`;
+        const queryUrl = `/api/exemptions?action=add&ext=${encodeURIComponent(val)}&scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
         const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         input.value = '';
@@ -487,10 +509,9 @@
     async function removeExemption(ext) {
       const params = new URLSearchParams(window.location.search);
       const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
-      const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
 
       try {
-        const queryUrl = `/api/exemptions?action=remove&ext=${encodeURIComponent(ext)}&sessionId=${encodeURIComponent(targetSessionId)}`;
+        const queryUrl = `/api/exemptions?action=remove&ext=${encodeURIComponent(ext)}&scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
         const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         refreshData(true);
@@ -503,10 +524,9 @@
       if (!confirm("Reset exempt file extensions to standard defaults (.pdf, .png, .jpg, media, etc.)?")) return;
       const params = new URLSearchParams(window.location.search);
       const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
-      const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
 
       try {
-        const queryUrl = `/api/exemptions?action=reset&sessionId=${encodeURIComponent(targetSessionId)}`;
+        const queryUrl = `/api/exemptions?action=reset&scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
         const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         refreshData(true);
@@ -523,13 +543,7 @@
         const params = new URLSearchParams(window.location.search);
         const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
         
-        let statsUrl = '/api/stats';
-        if (currentScope === 'all') {
-          statsUrl += '?sessionId=all';
-        } else if (convId) {
-          statsUrl += `?sessionId=${encodeURIComponent(convId)}`;
-        }
-
+        const statsUrl = `/api/stats?scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
         const statsRes = await apiFetch(statsUrl, { method: 'GET' });
         if (!statsRes.ok) throw new Error(`Stats HTTP ${statsRes.status}`);
         const s = await statsRes.json();
@@ -587,10 +601,7 @@
         } catch {}
 
         // Recent sources
-        let resumeUrl = '/api/resume';
-        if (convId && currentScope === 'session') {
-          resumeUrl += `?sessionId=${encodeURIComponent(convId)}`;
-        }
+        const resumeUrl = `/api/resume?scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
         const resumeRes = await apiFetch(resumeUrl, { method: 'GET' });
         if (resumeRes.ok) {
           const r = await resumeRes.json();
@@ -608,11 +619,20 @@
           }
         }
 
-        // Update timestamp
+        // Update timestamp & scope banner
         const now = new Date();
         document.getElementById('last-updated-text').innerText = `Updated ${now.toLocaleTimeString()}`;
+        let scopeLabel = 'CONVERSATION';
+        if (currentScope === 'app') {
+          const bootStr = s.appStartTime ? new Date(s.appStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+          scopeLabel = `SESSION${bootStr ? ' (since ' + bootStr + ')' : ''}`;
+        } else if (currentScope === 'lifetime') {
+          scopeLabel = 'LIFETIME (ALL-TIME)';
+        } else if (convId) {
+          scopeLabel = `CONVERSATION (${convId.slice(0, 8)}...)`;
+        }
         document.getElementById('telemetry-source').innerHTML = `
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live Telemetry (${currentScope.toUpperCase()})
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live Telemetry: <span class="font-semibold text-slate-200">${scopeLabel}</span>
         `;
 
       } catch (err) {
@@ -665,32 +685,21 @@
       const params = new URLSearchParams(window.location.search);
       const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
 
-      if (currentScope === 'all') {
-        const confirmed = confirm("Are you sure you want to reset all lifetime telemetry and index statistics across all sessions? This action cannot be undone.");
-        if (!confirmed) return;
-        try {
-          await apiFetch('/api/purge', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scope: 'all' })
-          });
-          refreshData(true);
-        } catch (err) {
-          alert("Reset failed: " + err.message);
-        }
-      } else {
-        const confirmed = confirm("Purge current session's indexed chunks and journal?");
-        if (!confirmed) return;
-        try {
-          await apiFetch('/api/purge', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ scope: 'session', sessionId: convId || undefined })
-          });
-          refreshData(true);
-        } catch (err) {
-          alert("Purge failed: " + err.message);
-        }
+      let confirmMsg = "Clear indexed chunks and metrics for this conversation?";
+      if (currentScope === 'app') {
+        confirmMsg = "Clear indexed chunks and metrics recorded during this application session?";
+      } else if (currentScope === 'lifetime') {
+        confirmMsg = "Are you sure you want to reset all lifetime telemetry and index statistics across all sessions? This action cannot be undone.";
+      }
+
+      if (!confirm(confirmMsg)) return;
+
+      try {
+        const queryUrl = `/api/purge?scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
+        await apiFetch(queryUrl, { method: 'GET' });
+        refreshData(true);
+      } catch (err) {
+        alert("Purge failed: " + err.message);
       }
     }
 

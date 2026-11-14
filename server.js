@@ -5,12 +5,19 @@ import { createTools } from "./lib/tools.js";
 
 const store = new ContextModeStore();
 let currentCwd = process.cwd();
-let currentSessionId = "default";
+let currentSessionId =
+  process.env.ANTIGRAVITY_CONVERSATION_ID ||
+  process.env.CONVERSATION_ID ||
+  "default";
 
 const tools = createTools({
   store,
   getCwd: () => currentCwd,
-  getSessionId: () => currentSessionId
+  getSessionId: () =>
+    process.env.ANTIGRAVITY_CONVERSATION_ID ||
+    process.env.CONVERSATION_ID ||
+    currentSessionId ||
+    "default"
 });
 
 const TOOL_DEFINITIONS = [
@@ -210,6 +217,14 @@ rl.on("line", async (line) => {
       case "tools/call": {
         const toolName = params?.name;
         const toolArgs = params?.arguments || {};
+        const callSessionId =
+          toolArgs.sessionId ||
+          params?._meta?.conversationId ||
+          params?._meta?.sessionId ||
+          params?.sessionId;
+        if (callSessionId) {
+          currentSessionId = callSessionId;
+        }
 
         if (!tools[toolName]) {
           sendError(id, -32601, `Unknown tool: ${toolName}`);
