@@ -211,6 +211,25 @@ test("PreToolUse hook - exempts user prompt attachments in .user_uploaded", asyn
   }
 });
 
+test("PreToolUse hook - exempts MS Office documents (.docx, .xlsx) over cutoff", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const tmpDocx = path.join(os.tmpdir(), "quarterly_report.docx");
+  fs.writeFileSync(tmpDocx, "PK\x03\x04" + "D".repeat(40 * 1024));
+
+  try {
+    const result = await runHook(hookFile, {
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpDocx }
+      }
+    });
+
+    assert.equal(result.decision, "allow");
+  } finally {
+    fs.unlinkSync(tmpDocx);
+  }
+});
+
 test("SessionStart hook - injects status system message", async () => {
   const hookFile = path.resolve("hooks/session-start.js");
   const result = await runHook(hookFile, {

@@ -29,13 +29,14 @@ function getExemptExtensions(sessionId = null) {
   }
 }
 
-function getMaxLineRange() {
+function getMaxLineRange(maxReadBytes = DEFAULT_MAX_READ_BYTES) {
   const envVal = process.env.CONTEXT_MODE_MAX_LINE_RANGE;
   if (envVal) {
     const parsed = parseInt(envVal, 10);
     if (!Number.isNaN(parsed) && parsed > 0) return parsed;
   }
-  return DEFAULT_MAX_LINE_RANGE;
+  if (maxReadBytes === 0) return 0;
+  return Math.max(50, Math.round(maxReadBytes / 40));
 }
 
 function formatBytes(bytes) {
@@ -49,8 +50,8 @@ function formatBytes(bytes) {
 }
 
 const BINARY_EXTENSIONS = new Set([
-  // Documents & PDFs
-  ".pdf",
+  // Documents & Office
+  ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt",
   // Images
   ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".tiff", ".tif",
   // Audio & Video
@@ -148,7 +149,7 @@ async function main() {
     const startLine = args.StartLine ?? args.startLine ?? 1;
     const endLine = args.EndLine ?? args.endLine ?? null;
     const maxReadBytes = getMaxReadBytes(sessionId);
-    const maxLineRange = getMaxLineRange();
+    const maxLineRange = getMaxLineRange(maxReadBytes);
 
     if (filePath) {
       const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
@@ -168,14 +169,14 @@ async function main() {
 
           const stat = fs.statSync(absPath);
           const isLargeFile = maxReadBytes > 0 && stat.size > maxReadBytes;
-          const isWideRange = endLine === null || endLine - startLine > maxLineRange;
+          const isWideRange = maxLineRange > 0 && (endLine === null || endLine - startLine > maxLineRange);
 
           if (isLargeFile && isWideRange) {
+            const lineInstruction = maxLineRange > 0 ? ` or provide a tight StartLine/EndLine range (<= ${maxLineRange} lines).` : "";
             const reason =
               `[context-mode protection] File is ${formatBytes(stat.size)} (~${Math.round(stat.size / 4).toLocaleString()} tokens), exceeding the ${formatBytes(maxReadBytes)} context limit. ` +
               `Reading the entire file risks severe context bloat. ` +
-              `Please use 'mcp_context-mode_ctx_index(path: "${filePath}")' followed by 'mcp_context-mode_ctx_search', ` +
-              `or provide a tight StartLine/EndLine range (<= ${maxLineRange} lines).`;
+              `Please use 'mcp_context-mode_ctx_index(path: "${filePath}")' followed by 'mcp_context-mode_ctx_search'${lineInstruction}`;
 
             process.stdout.write(
               JSON.stringify({

@@ -110,8 +110,15 @@ npm install -g antigravity-plugin-context-mode
 Context Mode includes a native web dashboard that opens directly in Antigravity's **Auxiliary (Side) Pane**:
 
 * **One-Click Open Pill:** Click `[Open Context Mode Dashboard](sidecar://antigravity-plugin-context-mode/dashboard/)` in chat anytime.
-* **Real-Time Telemetry:** Displays your session's reduction percentage, raw bytes vs prompt bytes, and tokens preserved.
-* **Volume Compression Bar:** Visual progress comparing raw data against tokens in context.
+* **3-Way Scope Toggle:** Seamlessly inspect telemetry at three distinct levels:
+  * **Conversation**: Telemetry strictly for the active conversation; clean slate on new chats.
+  * **Session**: Metrics aggregated across all conversations since the app restarted (Language Server boot).
+  * **Lifetime**: All-time cumulative database metrics and persistent totals.
+* **Interactive Cutoff Dropdown:** Switch size cutoffs on the fly (`2 KB`, `4 KB`, `8 KB`, `16 KB`, `32 KB`, `64 KB`, or `none`). Line slice limits scale dynamically (e.g. 2 KB: $\le$50 lines, 8 KB: $\le$200 lines, 32 KB: $\le$800 lines).
+* **Clickable Recent Sources:** Click any indexed source in the recent sources list to immediately inspect all of its indexed chunks right inside the Search Inspector.
+* **Exempt File Extensions Panel:** Live tag editor to add or remove custom file extensions (e.g. `.csv`, `.log`, `.json`) that bypass size limits.
+* **Default Exemptions & Attachments:** All chat prompt attachments (`@` mentions and drag-and-drops), PDFs, Microsoft Office documents (`.docx`, `.xlsx`, `.pptx`), and media files automatically bypass size restrictions.
+* **Dynamic Sandbox Output Cap:** Automatically scales script execution preview size to double the active cutoff.
 * **Interactive FTS5 Search Inspector:** Search your indexed logs and files directly from the UI to see what the agent has indexed.
 * **1-Click Session Purge:** Wipe session indexes and reset counters whenever you start a fresh task.
 
@@ -136,7 +143,14 @@ Once installed, the following 8 tools are registered in your Antigravity App:
 
 ## ⚙️ Configuration & Environment Variables
 
-You can customize Context Mode's cutoffs at any time using environment variables:
+You can customize Context Mode's cutoffs at any time using the dashboard dropdown or environment variables:
+
+| Variable | Default | Description |
+| :--- | :---: | :--- |
+| `CONTEXT_MODE_MAX_READ_BYTES` | `8192` (8 KB) | Size threshold beyond which un-paged file reads are rejected. Set `0` to disable. |
+| `CONTEXT_MODE_MAX_LINE_RANGE` | *Dynamic* (or `200`) | Maximum allowable line slice range before pagination rejection (scales with cutoff). |
+| `CONTEXT_MODE_MAX_OUTPUT_BYTES` | *Dynamic* (or `16384`) | Maximum raw preview bytes returned by `ctx_execute` (defaults to 2x cutoff). |
+| `CONTEXT_MODE_TIMEOUT_MS` | `30000` (30s) | Execution timeout for sandboxed code snippets. |
 
 | Variable | Default | Description |
 | :--- | :---: | :--- |

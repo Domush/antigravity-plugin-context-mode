@@ -77,6 +77,11 @@ test("ContextModeStore - initialization, FTS5 schema, indexing, and RRF search",
     assert.equal(state.recentSources.length, 1);
     assert.equal(state.recentEvents.length, 1);
 
+    // Chunks inspection by source ID
+    const chunks = store.getSourceChunks(indexRes.sourceId);
+    assert.ok(chunks.length >= 1);
+    assert.ok(chunks[0].body.includes("FlightComputerService"));
+
     // Purge
     const purgeRes = store.purge({ scope: "session", sessionId: "session-1" });
     assert.equal(purgeRes.ok, true);

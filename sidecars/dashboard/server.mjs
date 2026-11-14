@@ -60,7 +60,10 @@ function getStatsPayload(data, defaultConvId = "default") {
     ? stats.globalExemptExtensions
     : (scope === "app" ? stats.appExemptExtensions : stats.conversationExemptExtensions);
 
-  stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
+  // Sandbox cap is always double the current cutoff setting (or default 32 KB if none)
+  stats.sandboxCapBytes = stats.cutoffBytes > 0
+    ? (stats.cutoffBytes * 2)
+    : parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "32768", 10);
   return stats;
 }
 
@@ -143,6 +146,14 @@ if (isSidecarEnv) {
     }
   };
   app.api("/api/resume", handleResume, "GET");
+
+  const handleSourceChunks = (data) => {
+    const sourceId = data.sourceId;
+    if (!sourceId) return { ok: false, chunks: [] };
+    const chunks = store.getSourceChunks(sourceId);
+    return { ok: true, sourceId, chunks };
+  };
+  app.api("/api/source-chunks", handleSourceChunks, "GET");
 
   const handleSearch = (data) => {
     const queries = Array.isArray(data.queries) ? data.queries : [data.query || ""];
@@ -299,6 +310,14 @@ if (isSidecarEnv) {
       }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(resume));
+      return;
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/source-chunks") {
+      const sourceId = url.searchParams.get("sourceId");
+      const chunks = store.getSourceChunks(sourceId);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, sourceId, chunks }));
       return;
     }
 

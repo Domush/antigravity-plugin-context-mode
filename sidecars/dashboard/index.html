@@ -102,7 +102,7 @@
     <!-- Top 4 Metric Cards (2x2 Grid) -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
       <!-- Card 1: Reduction Rate -->
-      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
+      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between" title="Percentage of raw data diverted away from the LLM prompt">
         <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Reduction Rate</div>
         <div class="mt-2 flex items-baseline gap-1.5">
           <span id="reduction-rate" class="text-3xl font-extrabold text-[#00e599] font-mono tracking-tight">--%</span>
@@ -112,7 +112,7 @@
       </div>
 
       <!-- Card 2: Tokens Preserved -->
-      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
+      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between" title="Calculated tokens saved (~4 bytes per token) by keeping large files and command outputs out of the model prompt">
         <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Tokens Preserved</div>
         <div class="mt-2">
           <span id="tokens-preserved" class="text-3xl font-extrabold text-[#818cf8] font-mono tracking-tight">~--</span>
@@ -123,7 +123,7 @@
       </div>
 
       <!-- Card 3: Data Throughput -->
-      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
+      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between" title="Total raw input bytes processed versus truncated/preview payload bytes returned into context">
         <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Data Throughput</div>
         <div class="mt-2 flex items-baseline gap-2 flex-wrap font-mono">
           <span id="total-raw" class="text-2xl font-extrabold text-white">-- KB</span>
@@ -134,7 +134,7 @@
       </div>
 
       <!-- Card 4: FTS5 Chunks Indexed -->
-      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
+      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between" title="Searchable content segments indexed into SQLite using Porter BM25 and Trigram Reciprocal Rank Fusion">
         <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">FTS5 Chunks Indexed</div>
         <div class="mt-2 flex items-baseline gap-1.5 font-mono">
           <span id="chunks-count" class="text-3xl font-extrabold text-purple-400">--</span>
@@ -145,7 +145,7 @@
     </div>
 
     <!-- Middle Section: Prompt Payload Comparison -->
-    <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3.5">
+    <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3.5" title="Visual comparison of context window usage without vs with Context Mode">
       <div class="flex justify-between items-center">
         <span class="text-xs font-bold text-slate-200">Prompt Payload Comparison</span>
         <span id="comparison-badge" class="text-xs font-mono font-semibold text-[#00e599]">Calculating...</span>
@@ -185,21 +185,21 @@
           Active Lifecycle Gates
         </div>
         <div class="mt-3.5 space-y-3 text-[11px]">
-          <div class="flex items-start gap-2">
+          <div class="flex items-start gap-2" title="PreToolUse intercepts read_file before execution to prevent dumping multi-KB files into context.">
             <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
             <div class="leading-relaxed">
               <strong class="font-mono text-slate-200 font-semibold">PreToolUse (read_file):</strong> 
               <span id="gate-read-cutoff" class="text-slate-400">Blocks files &gt;8 KB un-paged; requires line slices (&le;200 lines)</span>
             </div>
           </div>
-          <div class="flex items-start gap-2">
+          <div class="flex items-start gap-2" title="PreToolUse intercepts shell log dumps (cat, Get-Content, git log) that could flood context.">
             <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
             <div class="leading-relaxed">
               <strong class="font-mono text-slate-200 font-semibold">PreToolUse (run_command):</strong> 
               <span class="text-slate-400">Intercepts unbounded log dumps (<code class="text-slate-300">cat *.log</code>, <code class="text-slate-300">Get-Content</code>)</span>
             </div>
           </div>
-          <div class="flex items-start gap-2">
+          <div class="flex items-start gap-2" title="SessionStart automatically injects context budgeting rules and state recovery pointers.">
             <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
             <div class="leading-relaxed">
               <strong class="font-mono text-slate-200 font-semibold">SessionStart:</strong> 
@@ -218,19 +218,19 @@
           Engine &amp; SQLite Health
         </div>
         <div class="mt-3.5 grid grid-cols-2 gap-2">
-          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]">
+          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]" title="Local native SQLite engine with Write-Ahead Logging (WAL) for high-concurrency read/write operations">
             <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">ENGINE</div>
             <div class="text-xs font-mono font-semibold text-slate-200 mt-1">node:sqlite (WAL)</div>
           </div>
-          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]">
+          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]" title="Reciprocal Rank Fusion (k=60) combining Porter stemmer full-text search with substring trigram matching">
             <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">SEARCH RANK</div>
             <div class="text-xs font-mono font-semibold text-slate-200 mt-1">BM25 + Tri (RRF 60)</div>
           </div>
-          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]">
+          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]" title="Maximum preview slice of script output returned directly into prompt (dynamically set to double the current cutoff); full output is safely indexed in SQLite and queryable via ctx_search">
             <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">SANDBOX CAP</div>
             <div id="sandbox-cap" class="text-xs font-mono font-semibold text-slate-200 mt-1">16 KB preview</div>
           </div>
-          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]">
+          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]" title="Live diagnostic status of the SQLite database and FTS5 search index">
             <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">STATUS</div>
             <div id="doctor-status" class="text-xs font-mono font-bold text-[#00e599] mt-1">HEALTHY</div>
           </div>
@@ -249,10 +249,10 @@
           <span class="text-[10px] font-normal text-slate-400 font-sans">(Bypass size cutoff)</span>
         </div>
         <div class="flex items-center gap-2">
-          <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+          <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1" title="Files attached directly in chat prompts bypass cutoff restrictions so agents can inspect them in full">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> @ / Drag-drop attachments always exempt
           </span>
-          <button onclick="resetExemptions()" class="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition" title="Restore default media & document exemptions">
+          <button onclick="resetExemptions()" class="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition" title="Restore default media, document, and office exemptions">
             Reset Defaults
           </button>
         </div>
@@ -272,10 +272,18 @@
           + Add
         </button>
       </div>
+
+      <!-- Scope note explaining persistence -->
+      <div class="text-[10px] text-slate-400 font-mono flex items-center gap-1.5 pt-1">
+        <svg class="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span>Exemptions and cutoffs are saved for <strong id="exempt-scope-note" class="text-indigo-300 font-semibold">Conversation</strong> scope. Conversation tags apply to this chat; Session tags persist until app restart; Lifetime tags persist across reboots.</span>
+      </div>
     </div>
 
     <!-- Integrated Search Inspector -->
-    <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3">
+    <div id="search-inspector-card" class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3">
       <div class="flex justify-between items-center">
         <div class="flex items-center gap-2 text-xs font-bold text-slate-200">
           <svg class="w-4 h-4 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -351,6 +359,11 @@
         cutoffLabel.innerText = 'Global Cutoff:';
       }
 
+      const scopeNote = document.getElementById('exempt-scope-note');
+      if (scopeNote) {
+        scopeNote.innerText = scope === 'conversation' ? 'Conversation' : (scope === 'app' ? 'Session' : 'Lifetime');
+      }
+
       // Update dropdown selection based on active scope
       if (cachedStats) {
         updateCutoffDropdown(cachedStats);
@@ -358,6 +371,12 @@
       }
 
       refreshData(true);
+    }
+
+    function calculateMaxLineRange(bytes) {
+      const b = Number(bytes || 0);
+      if (b <= 0) return 0;
+      return Math.max(50, Math.round(b / 40));
     }
 
     function formatBytes(bytes) {
@@ -422,7 +441,8 @@
         if (activeCutoff === 0) {
           gateReadCutoff.innerText = 'Cutoff disabled (all file sizes allowed un-paged)';
         } else {
-          gateReadCutoff.innerText = `Blocks files >${formatBytes(activeCutoff)} un-paged; requires line slices (≤200 lines)`;
+          const maxLines = calculateMaxLineRange(activeCutoff);
+          gateReadCutoff.innerText = `Blocks files >${formatBytes(activeCutoff)} un-paged; requires line slices (≤${maxLines} lines)`;
         }
       }
     }
@@ -441,7 +461,8 @@
           if (cutoffBytes === 0) {
             gateReadCutoff.innerText = 'Cutoff disabled (all file sizes allowed un-paged)';
           } else {
-            gateReadCutoff.innerText = `Blocks files >${formatBytes(cutoffBytes)} un-paged; requires line slices (≤200 lines)`;
+            const maxLines = calculateMaxLineRange(cutoffBytes);
+            gateReadCutoff.innerText = `Blocks files >${formatBytes(cutoffBytes)} un-paged; requires line slices (≤${maxLines} lines)`;
           }
         }
         if (cachedStats) {
@@ -609,9 +630,20 @@
 
           if (r.recentSources && r.recentSources.length > 0) {
             sourcesDiv.innerHTML = r.recentSources.map(src => `
-              <div class="p-2 rounded bg-black/40 border border-white/5 flex justify-between items-center">
-                <span class="truncate max-w-[220px] text-slate-300 font-medium" title="${src.label}">${src.label}</span>
-                <span class="text-indigo-400 text-xs">${formatBytes(src.bytes_total)} <span class="text-slate-500">(${src.chunk_count} chunks)</span></span>
+              <div onclick="inspectSource('${src.id}', '${encodeURIComponent(src.label)}')" 
+                   class="p-2 rounded-lg bg-black/40 hover:bg-white/[0.06] border border-white/5 hover:border-indigo-500/40 flex justify-between items-center cursor-pointer transition group" 
+                   title="Click to view indexed chunks in Search Inspector">
+                <div class="flex items-center gap-2 truncate max-w-[210px]">
+                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 group-hover:scale-125 transition-transform flex-shrink-0"></span>
+                  <span class="truncate text-slate-300 group-hover:text-white font-medium text-xs">${src.label}</span>
+                </div>
+                <div class="flex items-center gap-1.5 flex-shrink-0 font-mono text-[11px]">
+                  <span class="text-indigo-400">${formatBytes(src.bytes_total)}</span>
+                  <span class="text-slate-500 text-[10px]">(${src.chunk_count} ${src.chunk_count === 1 ? 'chunk' : 'chunks'})</span>
+                  <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
               </div>
             `).join('');
           } else {
@@ -646,6 +678,41 @@
           setTimeout(() => refreshIcon.classList.remove('spinning'), 400);
         }
       }
+    }
+
+    async function inspectSource(sourceId, encodedLabel) {
+      const label = decodeURIComponent(encodedLabel || '');
+      const input = document.getElementById('search-input');
+      if (input) input.value = label;
+
+      const resultsDiv = document.getElementById('search-results');
+      resultsDiv.innerHTML = '<div class="text-slate-400 italic text-xs">Loading chunks for source...</div>';
+
+      try {
+        const res = await apiFetch(`/api/source-chunks?sourceId=${encodeURIComponent(sourceId)}`, { method: 'GET' });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.chunks && data.chunks.length > 0) {
+            resultsDiv.innerHTML = data.chunks.map((ch, idx) => `
+              <div class="p-2.5 rounded-lg bg-black/50 border border-white/10 space-y-1.5">
+                <div class="flex justify-between text-xs text-indigo-400 font-mono">
+                  <span class="truncate font-semibold text-slate-200">${label} [Chunk ${idx + 1}/${data.chunks.length}]</span>
+                  <span class="bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded text-[10px]">${ch.body.length} B</span>
+                </div>
+                <div class="text-[11px] text-slate-300 font-mono whitespace-pre-wrap break-all leading-relaxed">${ch.body.slice(0, 380)}${ch.body.length > 380 ? '...' : ''}</div>
+              </div>
+            `).join('');
+            const card = document.getElementById('search-inspector-card');
+            if (card) card.scrollIntoView({ behavior: 'smooth' });
+            return;
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load source chunks:", err);
+      }
+
+      // Fallback to normal search query
+      executeSearch();
     }
 
     async function executeSearch() {
