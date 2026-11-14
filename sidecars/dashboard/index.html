@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Context Mode Dashboard</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    body {
+      background-color: #12131c;
+      color: #f3f4f6;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+  </style>
+</head>
+<body class="p-4 space-y-4 text-xs select-none">
+  <!-- Top Bar -->
+  <div class="flex items-center justify-between pb-3 border-b border-white/10">
+    <div class="flex items-center gap-2">
+      <div class="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 font-bold">
+        ⚡
+      </div>
+      <div>
+        <h1 class="text-sm font-bold text-white">Context Mode</h1>
+        <p class="text-[10px] text-slate-400">SQLite FTS5 Token Preserver</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-1.5">
+      <span id="status-badge" class="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 font-mono">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> ACTIVE
+      </span>
+      <button onclick="refreshData()" class="p-1.5 rounded bg-white/5 hover:bg-white/10 text-slate-300 transition" title="Refresh">
+        ↻
+      </button>
+    </div>
+  </div>
+
+  <!-- Metric Overview -->
+  <div class="grid grid-cols-2 gap-2">
+    <div class="p-3 rounded-xl bg-white/[0.03] border border-white/10">
+      <div class="text-[10px] text-slate-400 font-medium">REDUCTION RATE</div>
+      <div id="savings-rate" class="text-2xl font-black text-emerald-400 font-mono mt-1">99.2%</div>
+      <div class="text-[10px] text-slate-500 mt-0.5">Tokens saved</div>
+    </div>
+    <div class="p-3 rounded-xl bg-white/[0.03] border border-white/10">
+      <div class="text-[10px] text-slate-400 font-medium">TOKENS PRESERVED</div>
+      <div id="tokens-saved" class="text-2xl font-black text-indigo-400 font-mono mt-1">~16,448</div>
+      <div class="text-[10px] text-slate-500 mt-0.5">Diverted from prompt</div>
+    </div>
+  </div>
+
+  <!-- Volume Comparison Bar -->
+  <div class="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-2">
+    <div class="flex justify-between items-center text-[11px]">
+      <span class="text-slate-300 font-semibold">Volume Compression</span>
+      <span id="raw-vs-returned" class="text-indigo-400 font-mono text-[10px]">64.8 KB → 550 B</span>
+    </div>
+    <div class="w-full bg-white/5 h-2.5 rounded-full overflow-hidden flex">
+      <div id="bar-fill" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full rounded-full transition-all duration-500" style="width: 1%"></div>
+    </div>
+    <div class="flex justify-between text-[9px] text-slate-500 font-mono">
+      <span>0 KB</span>
+      <span id="raw-label">Raw Output: 64.8 KB</span>
+    </div>
+  </div>
+
+  <!-- Interactive Search Inspector -->
+  <div class="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-2">
+    <div class="text-[11px] font-semibold text-slate-300">Live FTS5 Search Inspector</div>
+    <div class="flex gap-1.5">
+      <input id="search-input" type="text" placeholder="Search indexed logs, errors, classes..." 
+             class="flex-1 bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+             onkeydown="if(event.key==='Enter') executeSearch()" />
+      <button onclick="executeSearch()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-xs">
+        Search
+      </button>
+    </div>
+    <div id="search-results" class="space-y-1.5 max-h-48 overflow-y-auto pr-1"></div>
+  </div>
+
+  <!-- Recent Indexed Sources -->
+  <div class="p-3 rounded-xl bg-white/[0.03] border border-white/10 space-y-2">
+    <div class="flex justify-between items-center text-[11px]">
+      <span class="font-semibold text-slate-300">Recent Indexed Sources</span>
+      <button onclick="purgeSession()" class="text-[10px] text-rose-400 hover:text-rose-300 transition">
+        Purge Session
+      </button>
+    </div>
+    <div id="sources-list" class="space-y-1 max-h-36 overflow-y-auto font-mono text-[10px]">
+      <div class="text-slate-500 italic">Loading sources...</div>
+    </div>
+  </div>
+
+  <!-- Footer Info -->
+  <div class="pt-2 flex justify-between items-center text-[10px] text-slate-500 font-mono border-t border-white/5">
+    <span>SQLite FTS5 (WAL Mode)</span>
+    <span>v1.0.0</span>
+  </div>
+
+  <script>
+    function formatBytes(bytes) {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+    }
+
+    async function refreshData() {
+      try {
+        const statsRes = await fetch('/api/stats');
+        const s = await statsRes.json();
+
+        document.getElementById('savings-rate').innerText = s.savingsPercent + "%";
+        document.getElementById('tokens-saved').innerText = "~" + (s.tokensKeptOut || 0).toLocaleString();
+        document.getElementById('raw-vs-returned').innerText = `${formatBytes(s.totalRawBytes)} → ${formatBytes(s.totalReturnedBytes)}`;
+        document.getElementById('raw-label').innerText = `Raw Output: ${formatBytes(s.totalRawBytes)}`;
+
+        const pct = s.totalRawBytes > 0 ? Math.max(1, (s.totalReturnedBytes / s.totalRawBytes) * 100) : 0;
+        document.getElementById('bar-fill').style.width = pct + "%";
+
+        const resumeRes = await fetch('/api/resume');
+        const r = await resumeRes.json();
+        const sourcesDiv = document.getElementById('sources-list');
+
+        if (r.recentSources && r.recentSources.length > 0) {
+          sourcesDiv.innerHTML = r.recentSources.map(src => `
+            <div class="p-1.5 rounded bg-black/30 border border-white/5 flex justify-between items-center">
+              <span class="truncate max-w-[180px] text-slate-300" title="${src.label}">${src.label}</span>
+              <span class="text-indigo-400">${formatBytes(src.bytes_total)} (${src.chunk_count} chunks)</span>
+            </div>
+          `).join('');
+        } else {
+          sourcesDiv.innerHTML = '<div class="text-slate-500 italic">No indexed sources in current session</div>';
+        }
+      } catch (err) {
+        console.error("Failed to refresh telemetry:", err);
+      }
+    }
+
+    async function executeSearch() {
+      const q = document.getElementById('search-input').value.trim();
+      if (!q) return;
+
+      const resultsDiv = document.getElementById('search-results');
+      resultsDiv.innerHTML = '<div class="text-slate-400 italic text-[10px]">Searching SQLite FTS5...</div>';
+
+      try {
+        const res = await fetch('/api/search', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: q })
+        });
+        const data = await res.json();
+
+        if (data.hits && data.hits.length > 0) {
+          resultsDiv.innerHTML = data.hits.map(h => `
+            <div class="p-2 rounded bg-black/40 border border-white/10 space-y-1">
+              <div class="flex justify-between text-[10px] text-indigo-400 font-mono">
+                <span class="truncate font-semibold">${h.title || h.sourceId}</span>
+                <span>RRF: ${h.rrfScore}</span>
+              </div>
+              <div class="text-[10px] text-slate-300 font-mono whitespace-pre-wrap break-all">${h.snippet.slice(0, 240)}...</div>
+            </div>
+          `).join('');
+        } else {
+          resultsDiv.innerHTML = '<div class="text-slate-500 text-[10px]">No matching chunks found.</div>';
+        }
+      } catch (err) {
+        resultsDiv.innerHTML = `<div class="text-rose-400 text-[10px]">Search failed: ${err.message}</div>`;
+      }
+    }
+
+    async function purgeSession() {
+      if (!confirm("Purge current session's indexed chunks and journal?")) return;
+      try {
+        await fetch('/api/purge', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ scope: 'session' })
+        });
+        refreshData();
+      } catch (err) {
+        alert("Purge failed: " + err.message);
+      }
+    }
+
+    // Auto-refresh every 3.5 seconds
+    refreshData();
+    setInterval(refreshData, 3500);
+  </script>
+</body>
+</html>
