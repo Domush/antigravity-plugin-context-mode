@@ -42,7 +42,16 @@ if (isSidecarEnv) {
 
   app.api("/api/stats", (data) => {
     const sessionId = data.sessionId || app.config.conversationId || "default";
-    return store.getStats(sessionId);
+    let stats = store.getStats(sessionId);
+    if (!stats.calls && !stats.sourcesCount && sessionId !== "default") {
+      const defStats = store.getStats("default");
+      if (defStats.calls || defStats.sourcesCount) {
+        stats = defStats;
+      }
+    }
+    stats.cutoffBytes = parseInt(process.env.CONTEXT_MODE_MAX_READ_BYTES || "8192", 10);
+    stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
+    return stats;
   }, "GET");
 
   app.api("/api/doctor", () => {
@@ -80,8 +89,17 @@ if (isSidecarEnv) {
 
     if (req.method === "GET" && url.pathname === "/api/stats") {
       const sessionId = url.searchParams.get("sessionId") || "default";
+      let stats = store.getStats(sessionId);
+      if (!stats.calls && !stats.sourcesCount && sessionId !== "default") {
+        const defStats = store.getStats("default");
+        if (defStats.calls || defStats.sourcesCount) {
+          stats = defStats;
+        }
+      }
+      stats.cutoffBytes = parseInt(process.env.CONTEXT_MODE_MAX_READ_BYTES || "8192", 10);
+      stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(store.getStats(sessionId)));
+      res.end(JSON.stringify(stats));
       return;
     }
 
