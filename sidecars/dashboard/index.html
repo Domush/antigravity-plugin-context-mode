@@ -235,6 +235,42 @@
       </div>
     </div>
 
+    <!-- Exempt File Extensions & Prompt Attachments -->
+    <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3">
+      <div class="flex justify-between items-center flex-wrap gap-2">
+        <div class="flex items-center gap-2 text-xs font-bold text-slate-200">
+          <svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+          </svg>
+          Exempt File Extensions
+          <span class="text-[10px] font-normal text-slate-400 font-sans">(Bypass size cutoff)</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> @ / Drag-drop attachments always exempt
+          </span>
+          <button onclick="resetExemptions()" class="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition" title="Restore default media & document exemptions">
+            Reset Defaults
+          </button>
+        </div>
+      </div>
+      
+      <!-- Tags List Container -->
+      <div id="exempt-tags" class="flex flex-wrap gap-1.5 min-h-[28px] items-center">
+        <div class="text-slate-500 italic text-xs">Loading exemptions...</div>
+      </div>
+
+      <!-- Add Tag Form -->
+      <div class="flex gap-2 pt-2 border-t border-white/[0.05]">
+        <input id="new-exempt-input" type="text" placeholder="Add extension (e.g. .csv, .log, .json)..." 
+               class="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono w-64"
+               onkeydown="if(event.key==='Enter') addExemption()" />
+        <button onclick="addExemption()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-xs shadow-sm">
+          + Add
+        </button>
+      </div>
+    </div>
+
     <!-- Integrated Search Inspector -->
     <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3">
       <div class="flex justify-between items-center">
@@ -307,6 +343,7 @@
       // Update dropdown selection based on active scope
       if (cachedStats) {
         updateCutoffDropdown(cachedStats);
+        updateExemptionsList(cachedStats);
       }
 
       refreshData(true);
@@ -375,6 +412,85 @@
       }
     }
 
+    function updateExemptionsList(s) {
+      const container = document.getElementById('exempt-tags');
+      if (!container) return;
+      const list = currentScope === 'all'
+        ? (s.globalExemptExtensions || s.exemptExtensions || [])
+        : (s.exemptExtensions || []);
+
+      if (list && list.length > 0) {
+        container.innerHTML = list.map(ext => `
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-mono text-xs">
+            <span>${ext}</span>
+            <button onclick="removeExemption('${ext}')" class="hover:text-rose-400 text-slate-400 font-bold ml-1 transition" title="Remove exemption">×</button>
+          </span>
+        `).join('');
+      } else {
+        container.innerHTML = '<span class="text-slate-500 italic text-xs">No extensions exempted.</span>';
+      }
+    }
+
+    async function addExemption() {
+      const input = document.getElementById('new-exempt-input');
+      const val = input.value.trim();
+      if (!val) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+      const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
+
+      try {
+        const res = await apiFetch('/api/exemptions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'add', ext: val, sessionId: targetSessionId })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        input.value = '';
+        refreshData(true);
+      } catch (err) {
+        alert("Failed to add exemption: " + err.message);
+      }
+    }
+
+    async function removeExemption(ext) {
+      const params = new URLSearchParams(window.location.search);
+      const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+      const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
+
+      try {
+        const res = await apiFetch('/api/exemptions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'remove', ext, sessionId: targetSessionId })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        refreshData(true);
+      } catch (err) {
+        alert("Failed to remove exemption: " + err.message);
+      }
+    }
+
+    async function resetExemptions() {
+      if (!confirm("Reset exempt file extensions to standard defaults (.pdf, .png, .jpg, media, etc.)?")) return;
+      const params = new URLSearchParams(window.location.search);
+      const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+      const targetSessionId = currentScope === 'all' ? 'all' : (convId || 'default');
+
+      try {
+        const res = await apiFetch('/api/exemptions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'reset', sessionId: targetSessionId })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        refreshData(true);
+      } catch (err) {
+        alert("Failed to reset exemptions: " + err.message);
+      }
+    }
+
     async function refreshData(manual = false) {
       const refreshIcon = document.getElementById('refresh-icon');
       if (manual && refreshIcon) refreshIcon.classList.add('spinning');
@@ -397,6 +513,7 @@
 
         // Update cutoff dropdown
         updateCutoffDropdown(s);
+        updateExemptionsList(s);
 
         if (s.sandboxCapBytes) {
           document.getElementById('sandbox-cap').innerText = formatBytes(s.sandboxCapBytes) + " preview";

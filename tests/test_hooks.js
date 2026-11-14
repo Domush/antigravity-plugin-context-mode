@@ -146,6 +146,69 @@ test("PreToolUse hook - deny unbounded command dumps", async () => {
   assert.ok(result.reason.includes("context-mode protection"));
 });
 
+test("PreToolUse hook - exempts PDF documents over cutoff", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const tmpFile = path.join(os.tmpdir(), "sample.pdf");
+  // Write 50 KB dummy PDF
+  fs.writeFileSync(tmpFile, "%PDF-1.5 dummy binary stream content " + "0".repeat(50 * 1024));
+
+  try {
+    const result = await runHook(hookFile, {
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpFile }
+      }
+    });
+
+    assert.equal(result.decision, "allow");
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test("PreToolUse hook - exempts images and binary files over cutoff", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const tmpFile = path.join(os.tmpdir(), "screenshot.png");
+  // Write 40 KB PNG
+  fs.writeFileSync(tmpFile, "\x89PNG\r\n\x1a\n" + "X".repeat(40 * 1024));
+
+  try {
+    const result = await runHook(hookFile, {
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpFile }
+      }
+    });
+
+    assert.equal(result.decision, "allow");
+  } finally {
+    fs.unlinkSync(tmpFile);
+  }
+});
+
+test("PreToolUse hook - exempts user prompt attachments in .user_uploaded", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const uploadDir = path.join(os.tmpdir(), ".user_uploaded");
+  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+  const tmpFile = path.join(uploadDir, "drag_drop_doc.txt");
+  // Write 30 KB text file inside .user_uploaded
+  fs.writeFileSync(tmpFile, "C".repeat(30 * 1024));
+
+  try {
+    const result = await runHook(hookFile, {
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpFile }
+      }
+    });
+
+    assert.equal(result.decision, "allow");
+  } finally {
+    fs.unlinkSync(tmpFile);
+    fs.rmdirSync(uploadDir);
+  }
+});
+
 test("SessionStart hook - injects status system message", async () => {
   const hookFile = path.resolve("hooks/session-start.js");
   const result = await runHook(hookFile, {

@@ -51,6 +51,8 @@ if (isSidecarEnv) {
     }
     stats.cutoffBytes = store.getCutoff(sessionId);
     stats.globalCutoffBytes = store.getCutoff(null);
+    stats.exemptExtensions = store.getExemptExtensions(sessionId);
+    stats.globalExemptExtensions = store.getExemptExtensions(null);
     stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
     return stats;
   }, "GET");
@@ -60,6 +62,24 @@ if (isSidecarEnv) {
     const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
     const saved = store.setCutoff(cutoffBytes, sessionId);
     return { ok: true, cutoffBytes: saved, sessionId };
+  }, "POST");
+
+  app.api("/api/exemptions", (data) => {
+    const sessionId = data.sessionId || app.config.conversationId || null;
+    const action = data.action || "get";
+    let list;
+    if (action === "add" && data.ext) {
+      list = store.addExemptExtension(data.ext, sessionId);
+    } else if (action === "remove" && data.ext) {
+      list = store.removeExemptExtension(data.ext, sessionId);
+    } else if (action === "set" && Array.isArray(data.extensions)) {
+      list = store.setExemptExtensions(data.extensions, sessionId);
+    } else if (action === "reset") {
+      list = store.setExemptExtensions(null, sessionId);
+    } else {
+      list = store.getExemptExtensions(sessionId);
+    }
+    return { ok: true, exemptExtensions: list, sessionId };
   }, "POST");
 
   app.api("/api/doctor", () => {
@@ -106,9 +126,41 @@ if (isSidecarEnv) {
       }
       stats.cutoffBytes = store.getCutoff(sessionId);
       stats.globalCutoffBytes = store.getCutoff(null);
+      stats.exemptExtensions = store.getExemptExtensions(sessionId);
+      stats.globalExemptExtensions = store.getExemptExtensions(null);
       stats.sandboxCapBytes = parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "16384", 10);
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(stats));
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/exemptions") {
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        try {
+          const data = JSON.parse(body || "{}");
+          const sessionId = data.sessionId || null;
+          const action = data.action || "get";
+          let list;
+          if (action === "add" && data.ext) {
+            list = store.addExemptExtension(data.ext, sessionId);
+          } else if (action === "remove" && data.ext) {
+            list = store.removeExemptExtension(data.ext, sessionId);
+          } else if (action === "set" && Array.isArray(data.extensions)) {
+            list = store.setExemptExtensions(data.extensions, sessionId);
+          } else if (action === "reset") {
+            list = store.setExemptExtensions(null, sessionId);
+          } else {
+            list = store.getExemptExtensions(sessionId);
+          }
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: true, exemptExtensions: list, sessionId }));
+        } catch (e) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: e.message }));
+        }
+      });
       return;
     }
 

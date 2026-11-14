@@ -20,6 +20,15 @@ function getMaxReadBytes(sessionId = null) {
   }
 }
 
+function getExemptExtensions(sessionId = null) {
+  try {
+    const store = new ContextModeStore();
+    return store.getExemptExtensions(sessionId);
+  } catch {
+    return Array.from(BINARY_EXTENSIONS);
+  }
+}
+
 function getMaxLineRange() {
   const envVal = process.env.CONTEXT_MODE_MAX_LINE_RANGE;
   if (envVal) {
@@ -37,6 +46,54 @@ function formatBytes(bytes) {
   }
   const mb = bytes / (1024 * 1024);
   return `${Number.isInteger(mb) ? mb : mb.toFixed(2)} MB`;
+}
+
+const BINARY_EXTENSIONS = new Set([
+  // Documents & PDFs
+  ".pdf",
+  // Images
+  ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".tiff", ".tif",
+  // Audio & Video
+  ".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac", ".mp4", ".webm", ".mkv", ".avi", ".mov",
+  // Archives & Executables
+  ".zip", ".tar", ".gz", ".7z", ".rar", ".exe", ".dll", ".so", ".dylib", ".bin",
+  // 3D & Models
+  ".blend", ".fbx", ".obj", ".gltf", ".glb", ".wasm"
+]);
+
+function isUserAttachedFile(filePath, absPath) {
+  const normalized = (absPath || filePath || "").replace(/\\/g, "/");
+  return (
+    normalized.includes("/.user_uploaded/") ||
+    normalized.includes("/user_uploaded/") ||
+    normalized.includes("/.system_generated/uploads/")
+  );
+}
+
+function isBinaryFile(absPath, ext) {
+  if (BINARY_EXTENSIONS.has((ext || "").toLowerCase())) {
+    return true;
+  }
+  try {
+    const fd = fs.openSync(absPath, "r");
+    const buf = Buffer.alloc(512);
+    const bytesRead = fs.readSync(fd, buf, 0, 512, 0);
+    fs.closeSync(fd);
+    if (bytesRead === 0) return false;
+
+    // Check for PDF magic header (%PDF)
+    if (bytesRead >= 4 && buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) {
+      return true;
+    }
+
+    // Check for null bytes indicating binary content
+    for (let i = 0; i < bytesRead; i++) {
+      if (buf[i] === 0) return true;
+    }
+  } catch {
+    // ignore inspection error
+  }
+  return false;
 }
 
 function readStdin() {
@@ -97,6 +154,18 @@ async function main() {
       const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
       try {
         if (fs.existsSync(absPath)) {
+          const ext = path.extname(absPath).toLowerCase();
+          const isUserAttachment = isUserAttachedFile(filePath, absPath);
+          const exemptExtensions = getExemptExtensions(sessionId);
+          const isExemptExt = exemptExtensions.includes(ext);
+          const isBinary = isBinaryFile(absPath, ext);
+
+          // Prompt attachments (drag-and-drop / user-uploaded), exempt extensions, or binary files bypass cutoff
+          if (isUserAttachment || isExemptExt || isBinary) {
+            process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+            return;
+          }
+
           const stat = fs.statSync(absPath);
           const isLargeFile = maxReadBytes > 0 && stat.size > maxReadBytes;
           const isWideRange = endLine === null || endLine - startLine > maxLineRange;
