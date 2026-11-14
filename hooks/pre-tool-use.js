@@ -2,10 +2,35 @@
 import fs from "node:fs";
 import path from "node:path";
 
+export const DEFAULT_MAX_READ_BYTES = 8192; // 8 KB default cutoff
+export const DEFAULT_MAX_LINE_RANGE = 200; // 200 lines max un-indexed slice
+
+function getMaxReadBytes() {
+  const envVal = process.env.CONTEXT_MODE_MAX_READ_BYTES;
+  if (envVal) {
+    const parsed = parseInt(envVal, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return DEFAULT_MAX_READ_BYTES;
+}
+
+function getMaxLineRange() {
+  const envVal = process.env.CONTEXT_MODE_MAX_LINE_RANGE;
+  if (envVal) {
+    const parsed = parseInt(envVal, 10);
+    if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return DEFAULT_MAX_LINE_RANGE;
+}
+
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  if (bytes < 1024 * 1024) {
+    const kb = bytes / 1024;
+    return `${Number.isInteger(kb) ? kb : kb.toFixed(1)} KB`;
+  }
+  const mb = bytes / (1024 * 1024);
+  return `${Number.isInteger(mb) ? mb : mb.toFixed(2)} MB`;
 }
 
 function readStdin() {
@@ -53,21 +78,23 @@ async function main() {
     const filePath = args.Path || args.path || args.filePath || "";
     const startLine = args.StartLine ?? args.startLine ?? 1;
     const endLine = args.EndLine ?? args.endLine ?? null;
+    const maxReadBytes = getMaxReadBytes();
+    const maxLineRange = getMaxLineRange();
 
     if (filePath) {
       const absPath = path.isAbsolute(filePath) ? filePath : path.resolve(cwd, filePath);
       try {
         if (fs.existsSync(absPath)) {
           const stat = fs.statSync(absPath);
-          const isLargeFile = stat.size > 32 * 1024; // >32 KB
-          const isWideRange = endLine === null || endLine - startLine > 400;
+          const isLargeFile = stat.size > maxReadBytes;
+          const isWideRange = endLine === null || endLine - startLine > maxLineRange;
 
           if (isLargeFile && isWideRange) {
             const reason =
-              `[context-mode protection] File is ${formatBytes(stat.size)} (~${Math.round(stat.size / 4).toLocaleString()} tokens). ` +
-              `Reading the entire file exceeds safe context window limits. ` +
+              `[context-mode protection] File is ${formatBytes(stat.size)} (~${Math.round(stat.size / 4).toLocaleString()} tokens), exceeding the ${formatBytes(maxReadBytes)} context limit. ` +
+              `Reading the entire file risks severe context bloat. ` +
               `Please use 'mcp_context-mode_ctx_index(path: "${filePath}")' followed by 'mcp_context-mode_ctx_search', ` +
-              `or provide a tight StartLine/EndLine range (<= 300 lines).`;
+              `or provide a tight StartLine/EndLine range (<= ${maxLineRange} lines).`;
 
             process.stdout.write(
               JSON.stringify({

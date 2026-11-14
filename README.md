@@ -13,8 +13,11 @@ Keeps massive tool outputs, long compile logs, web fetch dumps, and bulk files o
 
 - **Zero Third-Party Runtime Dependencies**: Built using Node.js native `DatabaseSync` (`node:sqlite`) and standard child process streams.
 - **Native Antigravity Lifecycle Hooks**:
-  - `PreToolUse`: Transparently blocks unbounded log dumps (`Get-Content`, `cat` on raw `.log`) and un-paged file reads over 32 KB, directing the agent to sandbox execution or BM25/trigram queries.
+  - `PreToolUse`: Transparently blocks unbounded log dumps (`Get-Content`, `cat` on raw `.log`) and un-paged file reads over 8 KB (~2,000 tokens), directing the agent to sandbox execution or BM25/trigram queries.
   - `SessionStart`: Injects session state continuity and active context protection notices.
+  - **Configurable Cutoffs via Environment Variables**:
+    - `CONTEXT_MODE_MAX_READ_BYTES`: Maximum byte size for un-paged file reads (default: `8192` = 8 KB).
+    - `CONTEXT_MODE_MAX_LINE_RANGE`: Maximum allowed line range slice without pagination rejection (default: `200` lines).
 - **Full Model Context Protocol (MCP) Server**: Exposes 8 tools directly to Antigravity:
   - `ctx_execute`: Sandboxed JavaScript, Python, PowerShell, or Shell code execution (Thinking in Code).
   - `ctx_batch`: Sequential batch command execution with unified output indexing and search.
