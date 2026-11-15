@@ -1,7 +1,17 @@
 #!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
 import readline from "node:readline";
+import { fileURLToPath } from "node:url";
 import { ContextModeStore } from "./lib/store.js";
 import { createTools } from "./lib/tools.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+let pkgVersion = "1.0.0";
+try {
+  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
+  if (pkg.version) pkgVersion = pkg.version;
+} catch {}
 
 const store = new ContextModeStore();
 let currentCwd = process.cwd();
@@ -196,7 +206,7 @@ rl.on("line", async (line) => {
           },
           serverInfo: {
             name: "antigravity-plugin-context-mode",
-            version: "1.0.0"
+            version: pkgVersion
           }
         });
         break;

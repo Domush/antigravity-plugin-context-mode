@@ -1,6 +1,6 @@
 {
   "name": "antigravity-plugin-context-mode",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Native Antigravity plugin for context-mode: SQLite FTS5 indexing, sandboxed execution, and lifecycle hook protection against context window bloat",
   "type": "module",
   "license": "MIT",

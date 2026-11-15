@@ -2,12 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import path from "node:path";
+import fs from "node:fs";
+import os from "node:os";
 import readline from "node:readline";
 
 test("MCP Server - JSON-RPC stdio handshake and tools/call", async () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctxm-mcp-"));
+  const tmpDbPath = path.join(tmpDir, "mcp-test.db");
   const serverPath = path.resolve("server.js");
   const child = spawn(process.execPath, [serverPath], {
-    stdio: ["pipe", "pipe", "pipe"]
+    stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, CONTEXT_MODE_DB_PATH: tmpDbPath }
   });
 
   const rl = readline.createInterface({
@@ -81,8 +86,11 @@ test("MCP Server - JSON-RPC stdio handshake and tools/call", async () => {
     const callRes = await waitForResponse(3);
     assert.equal(callRes.result.isError, false);
     const parsed = JSON.parse(callRes.result.content[0].text);
-    assert.equal(parsed.doctor.status, "HEALTHY");
+    assert.equal(parsed.doctor.status, "HEALTHY", `Doctor reported error: ${parsed.doctor.error || ''}`);
   } finally {
     child.kill();
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {}
   }
 });

@@ -6,6 +6,10 @@ import fs from "node:fs";
 import os from "node:os";
 import { ContextModeStore } from "../lib/store.js";
 
+const tmpHookDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctxm-hooks-"));
+const tmpHookDb = path.join(tmpHookDir, "hooks.db");
+process.env.CONTEXT_MODE_DB_PATH = tmpHookDb;
+
 function runHook(hookPath, stdinJson, env = {}) {
   return new Promise((resolve, reject) => {
     const childEnv = { ...process.env, ...env };

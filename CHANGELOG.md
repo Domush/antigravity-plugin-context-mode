@@ -2,6 +2,17 @@
 
 All notable changes to `antigravity-plugin-context-mode` will be documented in this file.
 
+## [1.2.1] - 2026-11-15
+
+### Fixed
+- **CI Test Database Contention (`CONTEXT_MODE_DB_PATH`)**: Updated `getDefaultDbPath()` in `lib/store.js` to respect `process.env.CONTEXT_MODE_DB_PATH`, and configured `tests/test_mcp.js` and `tests/test_hooks.js` to run in dedicated isolated temporary directories. Prevents database lock contention (`SQLITE_BUSY`) during concurrent test execution on multi-core CI runners.
+- **SQLite Busy Timeout**: Added `PRAGMA busy_timeout = 5000;` to database initialization with fallback handling to ensure robust concurrency when multiple processes interact with SQLite in WAL mode.
+- **Category Exemption Group Toggles**: Replaced the long list of individual file exemption chips in the dashboard with clean, one-click category pills (`Images`, `Documents`, `3D Models`, `Music`, `Video`, `Archives`, and `Source Code`). All binary categories default to enabled, with Source Code disabled by default. Added optimistic UI state switching in `toggleCategory()` for instant feedback upon click.
+- **Streamlined Custom File Types**: Restricted the dashboard's exemption tags container to only display user-added custom file types (e.g. `.csv`, `.parquet`, `.log`) with quick removal buttons (`×`).
+- **Status Banner Cleanup**: Replaced `"Live Telemetry"` with **`"Showing stats for: <SCOPE>"`** and removed distracting animations (`animate-ping`, `animate-pulse`) for steady, non-blinking visual indicators.
+- **Dynamic Upper-Right Version Badge**: Displays the active plugin version badge (`v1.2.1`) in the top-right header cluster of the dashboard, populated dynamically from `package.json` via `/api/stats`.
+- **Documentation & Formatting Polishing**: Removed all LaTeX math syntax from `README.md`, replacing it with standard Unicode (`≤ 50 lines`, `≤ 200 lines`, `≤ 800 lines`), and consolidated redundant configuration tables.
+
 ## [1.2.0] - 2026-11-15
 
 ### Fixed

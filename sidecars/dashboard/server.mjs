@@ -10,6 +10,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const store = new ContextModeStore();
 const HTML_FILE = path.join(__dirname, "index.html");
 
+function getPackageVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "../../package.json"), "utf8"));
+    if (pkg.version) return pkg.version;
+  } catch {}
+  return "1.0.0";
+}
+
+function getRenderedHtml() {
+  const raw = fs.readFileSync(HTML_FILE, "utf8");
+  const ver = getPackageVersion();
+  return raw.replace('id="dashboard-version">--</span>', `id="dashboard-version">v${ver}</span>`);
+}
+
 let appStartTime = null;
 try {
   const out = execSync(
@@ -81,12 +95,7 @@ function getStatsPayload(data, defaultConvId = "default") {
     : parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "32768", 10);
   stats.isPaused = store.isPaused(targetSid);
 
-  let pluginVersion = "1.2.0";
-  try {
-    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "../../package.json"), "utf8"));
-    if (pkg.version) pluginVersion = pkg.version;
-  } catch {}
-  stats.version = pluginVersion;
+  stats.version = getPackageVersion();
 
   return stats;
 }
@@ -119,7 +128,7 @@ if (isSidecarEnv) {
   const app = new SidecarApp();
 
   app.page("/", () => {
-    return fs.readFileSync(HTML_FILE, "utf8");
+    return getRenderedHtml();
   });
 
   app.api("/api/stats", (data) => {
@@ -230,7 +239,7 @@ if (isSidecarEnv) {
 
     if (req.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(fs.readFileSync(HTML_FILE, "utf8"));
+      res.end(getRenderedHtml());
       return;
     }
 
