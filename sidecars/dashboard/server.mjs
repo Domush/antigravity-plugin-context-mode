@@ -4,7 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { ContextModeStore } from "../../lib/store.js";
+import { ContextModeStore, FILE_CATEGORIES } from "../../lib/store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const store = new ContextModeStore();
@@ -60,10 +60,34 @@ function getStatsPayload(data, defaultConvId = "default") {
     ? stats.globalExemptExtensions
     : (scope === "app" ? stats.appExemptExtensions : stats.conversationExemptExtensions);
 
+  stats.fileCategories = Object.values(FILE_CATEGORIES);
+  stats.conversationExemptCategories = store.getExemptCategories(convId);
+  stats.appExemptCategories = store.getExemptCategories("app");
+  stats.globalExemptCategories = store.getExemptCategories(null);
+  stats.exemptCategories = scope === "lifetime"
+    ? stats.globalExemptCategories
+    : (scope === "app" ? stats.appExemptCategories : stats.conversationExemptCategories);
+
+  stats.conversationCustomExtensions = store.getCustomExemptExtensions(convId);
+  stats.appCustomExtensions = store.getCustomExemptExtensions("app");
+  stats.globalCustomExtensions = store.getCustomExemptExtensions(null);
+  stats.customExtensions = scope === "lifetime"
+    ? stats.globalCustomExtensions
+    : (scope === "app" ? stats.appCustomExtensions : stats.conversationCustomExtensions);
+
   // Sandbox cap is always double the current cutoff setting (or default 32 KB if none)
   stats.sandboxCapBytes = stats.cutoffBytes > 0
     ? (stats.cutoffBytes * 2)
     : parseInt(process.env.CONTEXT_MODE_MAX_OUTPUT_BYTES || "32768", 10);
+  stats.isPaused = store.isPaused(targetSid);
+
+  let pluginVersion = "1.2.0";
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "../../package.json"), "utf8"));
+    if (pkg.version) pluginVersion = pkg.version;
+  } catch {}
+  stats.version = pluginVersion;
+
   return stats;
 }
 
@@ -114,22 +138,43 @@ if (isSidecarEnv) {
   const handleExemptions = (data) => {
     const { scope, targetSid } = resolveTargetSession(data, app.config.conversationId);
     const action = data.action || "get";
-    let list;
-    if (action === "add" && data.ext) {
-      list = store.addExemptExtension(data.ext, targetSid);
+    if (action === "toggleCategory" && data.category) {
+      store.toggleExemptCategory(data.category, data.enabled !== undefined ? (data.enabled === true || data.enabled === "true" || data.enabled === "1") : null, targetSid);
+    } else if (action === "setCategories" && Array.isArray(data.categories)) {
+      store.setExemptCategories(data.categories, targetSid);
+    } else if (action === "add" && data.ext) {
+      store.addCustomExemptExtension(data.ext, targetSid);
     } else if (action === "remove" && data.ext) {
-      list = store.removeExemptExtension(data.ext, targetSid);
-    } else if (action === "set" && Array.isArray(data.extensions)) {
-      list = store.setExemptExtensions(data.extensions, targetSid);
+      store.removeCustomExemptExtension(data.ext, targetSid);
     } else if (action === "reset") {
-      list = store.setExemptExtensions(null, targetSid);
-    } else {
-      list = store.getExemptExtensions(targetSid);
+      store.setExemptCategories(null, targetSid);
+      store.setCustomExemptExtensions([], targetSid);
+    } else if (action === "set" && Array.isArray(data.extensions)) {
+      store.setExemptExtensions(data.extensions, targetSid);
     }
-    return { ok: true, exemptExtensions: list, scope, sessionId: targetSid };
+    return {
+      ok: true,
+      exemptCategories: store.getExemptCategories(targetSid),
+      customExtensions: store.getCustomExemptExtensions(targetSid),
+      exemptExtensions: store.getExemptExtensions(targetSid),
+      scope,
+      sessionId: targetSid
+    };
   };
   app.api("/api/exemptions", handleExemptions, "GET");
   app.api("/api/exemptions", handleExemptions, "POST");
+
+  const handleToggleActive = (data) => {
+    const { scope, targetSid } = resolveTargetSession(data, app.config.conversationId);
+    const current = store.isPaused(targetSid);
+    const newPaused = data.paused !== undefined ? (data.paused === true || data.paused === "true" || data.paused === "1") : !current;
+    const saved = store.setPaused(newPaused, targetSid);
+    return { ok: true, isPaused: saved, scope, sessionId: targetSid };
+  };
+  app.api("/api/toggle-active", handleToggleActive, "GET");
+  app.api("/api/toggle-active", handleToggleActive, "POST");
+  app.api("/api/paused", handleToggleActive, "GET");
+  app.api("/api/paused", handleToggleActive, "POST");
 
   app.api("/api/doctor", () => {
     return store.doctor();
@@ -223,24 +268,60 @@ if (isSidecarEnv) {
       return;
     }
 
+    if ((req.method === "GET" || req.method === "POST") && (url.pathname === "/api/toggle-active" || url.pathname === "/api/paused")) {
+      const handleToggleReq = (data) => {
+        const { scope, targetSid } = resolveTargetSession(data);
+        const current = store.isPaused(targetSid);
+        const newPaused = data.paused !== undefined ? (data.paused === true || data.paused === "true" || data.paused === "1") : !current;
+        const saved = store.setPaused(newPaused, targetSid);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true, isPaused: saved, scope, sessionId: targetSid }));
+      };
+      if (req.method === "GET") {
+        const data = Object.fromEntries(url.searchParams.entries());
+        handleToggleReq(data);
+      } else {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          try {
+            handleToggleReq(JSON.parse(body || "{}"));
+          } catch (e) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+      }
+      return;
+    }
+
     if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/exemptions") {
       const handleExemptReq = (data) => {
         const { scope, targetSid } = resolveTargetSession(data);
         const action = data.action || "get";
-        let list;
-        if (action === "add" && data.ext) {
-          list = store.addExemptExtension(data.ext, targetSid);
+        if (action === "toggleCategory" && data.category) {
+          store.toggleExemptCategory(data.category, data.enabled !== undefined ? (data.enabled === true || data.enabled === "true" || data.enabled === "1") : null, targetSid);
+        } else if (action === "setCategories" && Array.isArray(data.categories)) {
+          store.setExemptCategories(data.categories, targetSid);
+        } else if (action === "add" && data.ext) {
+          store.addCustomExemptExtension(data.ext, targetSid);
         } else if (action === "remove" && data.ext) {
-          list = store.removeExemptExtension(data.ext, targetSid);
-        } else if (action === "set" && Array.isArray(data.extensions)) {
-          list = store.setExemptExtensions(data.extensions, targetSid);
+          store.removeCustomExemptExtension(data.ext, targetSid);
         } else if (action === "reset") {
-          list = store.setExemptExtensions(null, targetSid);
-        } else {
-          list = store.getExemptExtensions(targetSid);
+          store.setExemptCategories(null, targetSid);
+          store.setCustomExemptExtensions([], targetSid);
+        } else if (action === "set" && Array.isArray(data.extensions)) {
+          store.setExemptExtensions(data.extensions, targetSid);
         }
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, exemptExtensions: list, scope, sessionId: targetSid }));
+        res.end(JSON.stringify({
+          ok: true,
+          exemptCategories: store.getExemptCategories(targetSid),
+          customExtensions: store.getCustomExemptExtensions(targetSid),
+          exemptExtensions: store.getExemptExtensions(targetSid),
+          scope,
+          sessionId: targetSid
+        }));
       };
       if (req.method === "GET") {
         const data = Object.fromEntries(url.searchParams.entries());

@@ -47,11 +47,14 @@
         <div>
           <div class="flex items-center gap-2.5 flex-wrap">
             <h1 class="text-base sm:text-lg font-bold text-white tracking-tight">Antigravity Context Mode</h1>
-            <span class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5">
-              <span class="w-1.5 h-1.5 rounded-full bg-[#00e599] animate-pulse"></span> Active
-            </span>
+            <button id="toggle-active-btn" onclick="toggleActiveState()" 
+                    class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none" 
+                    title="Context Mode is active — click to pause">
+              <span id="active-dot" class="w-1.5 h-1.5 rounded-full bg-[#00e599]"></span>
+              <span id="active-text">Active</span>
+            </button>
           </div>
-          <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5">SQLite FTS5 Reciprocal Rank Fusion &amp; Sandbox Execution</p>
+          <p class="text-[11px] sm:text-xs text-slate-400 mt-0.5">Saves token usage &amp; prevents context bloat — keeping LLMs smart, focused &amp; less forgetful</p>
         </div>
       </div>
       
@@ -82,6 +85,9 @@
             <option value="0">none</option>
           </select>
         </div>
+
+        <!-- Version Badge -->
+        <span id="dashboard-version" class="text-[10px] font-mono font-medium text-slate-400 bg-white/[0.04] border border-white/10 px-2 py-1 rounded-lg select-none" title="Current Context Mode Version">v1.2.0</span>
         
         <button id="refresh-btn" onclick="refreshData(true)" class="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition flex items-center justify-center" title="Refresh Telemetry">
           <svg id="refresh-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -91,186 +97,158 @@
       </div>
     </div>
 
-    <!-- Live Telemetry Status Banner -->
+    <!-- Status Banner -->
     <div id="telemetry-banner" class="flex justify-between items-center text-[10px] text-slate-400 font-mono px-1">
       <span id="telemetry-source" class="flex items-center gap-1.5">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Live Telemetry Connected
+        Showing stats for: <span class="font-semibold text-slate-200">CONVERSATION</span>
       </span>
       <span id="last-updated-text">Updating...</span>
     </div>
 
-    <!-- Top 4 Metric Cards (2x2 Grid) -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-      <!-- Card 1: Reduction Rate -->
-      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between" title="Percentage of raw data diverted away from the LLM prompt">
-        <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Reduction Rate</div>
-        <div class="mt-2 flex items-baseline gap-1.5">
-          <span id="reduction-rate" class="text-3xl font-extrabold text-[#00e599] font-mono tracking-tight">--%</span>
-          <span class="text-xs font-semibold text-[#00e599]/90">saved</span>
-        </div>
-        <div class="mt-2 text-[11px] text-slate-400">Tokens diverted from LLM</div>
+    <!-- Dual-color Context Savings Progress Bar -->
+    <div class="space-y-1.5 px-1" title="Context Savings: Kept out of context (Green) vs Returned to context (Rose)">
+      <div class="flex justify-between items-center text-xs">
+        <span class="text-slate-400 font-medium">Context Saved</span>
+        <span id="comparison-badge" class="font-mono font-bold text-[#00e599]">--% saved</span>
       </div>
-
-      <!-- Card 2: Tokens Preserved -->
-      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between" title="Calculated tokens saved (~4 bytes per token) by keeping large files and command outputs out of the model prompt">
-        <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Tokens Preserved</div>
-        <div class="mt-2">
-          <span id="tokens-preserved" class="text-3xl font-extrabold text-[#818cf8] font-mono tracking-tight">~--</span>
-        </div>
-        <div class="mt-2 text-[11px] text-slate-400">
-          <span id="kept-out-kb" class="font-medium text-slate-300">-- KB</span> kept out of prompt
-        </div>
-      </div>
-
-      <!-- Card 3: Data Throughput -->
-      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between" title="Total raw input bytes processed versus truncated/preview payload bytes returned into context">
-        <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">Data Throughput</div>
-        <div class="mt-2 flex items-baseline gap-2 flex-wrap font-mono">
-          <span id="total-raw" class="text-2xl font-extrabold text-white">-- KB</span>
-          <span class="text-slate-500 font-bold">→</span>
-          <span id="total-returned" class="text-2xl font-extrabold text-cyan-400">-- B</span>
-        </div>
-        <div class="mt-2 text-[11px] text-slate-400">Raw log vs Context payload</div>
-      </div>
-
-      <!-- Card 4: FTS5 Chunks Indexed -->
-      <div class="p-4 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between" title="Searchable content segments indexed into SQLite using Porter BM25 and Trigram Reciprocal Rank Fusion">
-        <div class="text-[11px] font-medium text-slate-400 tracking-wider uppercase">FTS5 Chunks Indexed</div>
-        <div class="mt-2 flex items-baseline gap-1.5 font-mono">
-          <span id="chunks-count" class="text-3xl font-extrabold text-purple-400">--</span>
-          <span id="sources-count" class="text-xs text-slate-400 font-sans">in -- sources</span>
-        </div>
-        <div class="mt-2 text-[11px] text-slate-400">Porter BM25 + Trigram RRF</div>
+      <div class="w-full h-2 rounded-full bg-[#23273c] overflow-hidden flex">
+        <div id="bar-saved-fill" class="h-full bg-[#00e599] transition-all duration-500" style="width: 0%;" title="Kept out of context"></div>
+        <div id="bar-used-fill" class="h-full bg-[#f43f5e] transition-all duration-500" style="width: 0%;" title="Returned to context"></div>
       </div>
     </div>
 
-    <!-- Middle Section: Prompt Payload Comparison -->
-    <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3.5" title="Visual comparison of context window usage without vs with Context Mode">
-      <div class="flex justify-between items-center">
-        <span class="text-xs font-bold text-slate-200">Prompt Payload Comparison</span>
-        <span id="comparison-badge" class="text-xs font-mono font-semibold text-[#00e599]">Calculating...</span>
-      </div>
+    <!-- Combined Performance Metrics Card (Reformatted Key-Value Rows) -->
+    <div class="p-3.5 sm:p-4 rounded-xl bg-[#181a28] border border-white/[0.07]">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+        <!-- Metric 1: Reduction Rate -->
+        <div class="flex items-center justify-between gap-3 pb-3 md:pb-0 border-b md:border-b-0 border-white/[0.05]" title="Percentage of large files and command outputs kept out of context">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-slate-200">Reduction Rate</div>
+            <div class="text-[11px] text-slate-400">Context window preserved</div>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <span id="reduction-rate" class="text-xl font-extrabold text-[#00e599] font-mono tracking-tight">--%</span>
+            <span class="text-xs font-semibold text-[#00e599]/90 ml-1">saved</span>
+          </div>
+        </div>
 
-      <!-- Raw Dump Bar -->
-      <div>
-        <div class="flex justify-between text-[11px] font-mono mb-1.5 text-slate-300">
-          <span>Without Context Mode (Raw Dump)</span>
-          <span id="bar-raw-label" class="text-slate-400">-- KB (100%)</span>
+        <!-- Metric 2: Tokens Preserved -->
+        <div class="flex items-center justify-between gap-3 pb-3 md:pb-0 border-b md:border-b-0 border-white/[0.05]" title="Calculated tokens saved (~4 bytes per token) by keeping large files and outputs out of context">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-slate-200">Tokens Preserved</div>
+            <div class="text-[11px] text-slate-400">Context reduced by <span id="kept-out-kb" class="font-medium text-slate-300">-- KB</span></div>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <span id="tokens-preserved" class="text-xl font-extrabold text-[#818cf8] font-mono tracking-tight">~--</span>
+          </div>
         </div>
-        <div class="w-full h-2.5 rounded-full bg-[#23273c] overflow-hidden">
-          <div id="bar-raw-fill" class="h-full rounded-full bg-[#f43f5e] transition-all duration-500" style="width: 100%;"></div>
-        </div>
-      </div>
 
-      <!-- Sandboxed Slice Bar -->
-      <div>
-        <div class="flex justify-between text-[11px] font-mono mb-1.5 text-slate-300">
-          <span>With Context Mode (Sandboxed Slice)</span>
-          <span id="bar-returned-label" class="text-[#00e599]">-- B (0%)</span>
+        <!-- Metric 3: Data Filtered -->
+        <div class="flex items-center justify-between gap-3 pb-3 md:pb-0 border-b md:border-b-0 border-white/[0.05]" title="Total raw data intercepted versus the compact slice actually returned into context">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-slate-200">Data Filtered</div>
+            <div class="text-[11px] text-slate-400">Raw intercepted → Context returned</div>
+          </div>
+          <div class="text-right flex-shrink-0 font-mono">
+            <span id="total-raw" class="text-sm font-bold text-white">-- KB</span>
+            <span class="text-slate-500 font-bold text-xs mx-0.5">→</span>
+            <span id="total-returned" class="text-sm font-bold text-cyan-400">-- B</span>
+          </div>
         </div>
-        <div class="w-full h-2.5 rounded-full bg-[#23273c] overflow-hidden">
-          <div id="bar-returned-fill" class="h-full rounded-full bg-[#00e599] transition-all duration-500" style="width: 0.8%; min-width: 6px;"></div>
-        </div>
-      </div>
-    </div>
 
-    <!-- Bottom Section: 2 Columns -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-      <!-- Left Card: Active Lifecycle Gates -->
-      <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] flex flex-col justify-between">
-        <div class="flex items-center gap-2 text-xs font-bold text-slate-200">
-          <svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          Active Lifecycle Gates
-        </div>
-        <div class="mt-3.5 space-y-3 text-[11px]">
-          <div class="flex items-start gap-2" title="PreToolUse intercepts read_file before execution to prevent dumping multi-KB files into context.">
-            <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
-            <div class="leading-relaxed">
-              <strong class="font-mono text-slate-200 font-semibold">PreToolUse (read_file):</strong> 
-              <span id="gate-read-cutoff" class="text-slate-400">Blocks files &gt;8 KB un-paged; requires line slices (&le;200 lines)</span>
-            </div>
+        <!-- Metric 4: Search Index Chunks -->
+        <div class="flex items-center justify-between gap-3" title="Searchable content segments indexed locally so the model can retrieve exact details on demand">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-slate-200">Search Index Chunks</div>
+            <div class="text-[11px] text-slate-400">Instant local search &amp; retrieval</div>
           </div>
-          <div class="flex items-start gap-2" title="PreToolUse intercepts shell log dumps (cat, Get-Content, git log) that could flood context.">
-            <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
-            <div class="leading-relaxed">
-              <strong class="font-mono text-slate-200 font-semibold">PreToolUse (run_command):</strong> 
-              <span class="text-slate-400">Intercepts unbounded log dumps (<code class="text-slate-300">cat *.log</code>, <code class="text-slate-300">Get-Content</code>)</span>
-            </div>
-          </div>
-          <div class="flex items-start gap-2" title="SessionStart automatically injects context budgeting rules and state recovery pointers.">
-            <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
-            <div class="leading-relaxed">
-              <strong class="font-mono text-slate-200 font-semibold">SessionStart:</strong> 
-              <span class="text-slate-400">Auto-injects guidance &amp; state recovery pointers</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right Card: Engine & SQLite Health -->
-      <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07]">
-        <div class="flex items-center gap-2 text-xs font-bold text-slate-200">
-          <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
-          </svg>
-          Engine &amp; SQLite Health
-        </div>
-        <div class="mt-3.5 grid grid-cols-2 gap-2">
-          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]" title="Local native SQLite engine with Write-Ahead Logging (WAL) for high-concurrency read/write operations">
-            <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">ENGINE</div>
-            <div class="text-xs font-mono font-semibold text-slate-200 mt-1">node:sqlite (WAL)</div>
-          </div>
-          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]" title="Reciprocal Rank Fusion (k=60) combining Porter stemmer full-text search with substring trigram matching">
-            <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">SEARCH RANK</div>
-            <div class="text-xs font-mono font-semibold text-slate-200 mt-1">BM25 + Tri (RRF 60)</div>
-          </div>
-          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]" title="Maximum preview slice of script output returned directly into prompt (dynamically set to double the current cutoff); full output is safely indexed in SQLite and queryable via ctx_search">
-            <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">SANDBOX CAP</div>
-            <div id="sandbox-cap" class="text-xs font-mono font-semibold text-slate-200 mt-1">16 KB preview</div>
-          </div>
-          <div class="p-2.5 rounded-lg bg-[#121420] border border-white/[0.05]" title="Live diagnostic status of the SQLite database and FTS5 search index">
-            <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">STATUS</div>
-            <div id="doctor-status" class="text-xs font-mono font-bold text-[#00e599] mt-1">HEALTHY</div>
+          <div class="text-right flex-shrink-0 font-mono">
+            <span id="chunks-count" class="text-xl font-extrabold text-purple-400">--</span>
+            <span id="sources-count" class="text-xs text-slate-400 font-sans ml-1">in -- sources</span>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Exempt File Extensions & Prompt Attachments -->
-    <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3">
+    <!-- Exempt File Types & Chat Attachments -->
+    <div class="p-4 sm:p-5 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-3.5">
       <div class="flex justify-between items-center flex-wrap gap-2">
         <div class="flex items-center gap-2 text-xs font-bold text-slate-200">
           <svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
-          Exempt File Extensions
+          Exempt File Types
           <span class="text-[10px] font-normal text-slate-400 font-sans">(Bypass size cutoff)</span>
         </div>
         <div class="flex items-center gap-2">
-          <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1" title="Files attached directly in chat prompts bypass cutoff restrictions so agents can inspect them in full">
+          <span class="text-[10px] text-emerald-400 font-mono flex items-center gap-1" title="Files attached directly in chat messages bypass cutoff restrictions so agents can inspect them in full">
             <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> @ / Drag-drop attachments always exempt
           </span>
-          <button onclick="resetExemptions()" class="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition" title="Restore default media, document, and office exemptions">
+          <button onclick="resetExemptions()" class="text-[10px] px-2 py-0.5 rounded bg-white/[0.04] hover:bg-white/10 text-slate-400 hover:text-white border border-white/10 transition cursor-pointer" title="Restore default file categories and clear custom extensions">
             Reset Defaults
           </button>
         </div>
       </div>
       
-      <!-- Tags List Container -->
-      <div id="exempt-tags" class="flex flex-wrap gap-1.5 min-h-[28px] items-center">
-        <div class="text-slate-500 italic text-xs">Loading exemptions...</div>
+      <!-- Category Toggles (Just below card header) -->
+      <div class="space-y-1.5">
+        <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <span class="font-medium">File Categories (toggle groups):</span>
+          <span id="category-summary" class="text-[10px] text-slate-500 font-mono">6 of 7 active</span>
+        </div>
+        <div id="category-toggles" class="flex flex-wrap gap-1.5">
+          <button onclick="toggleCategory('images')" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none" title="Images — Click to disable">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#00e599]"></span>
+            <span>Images</span>
+          </button>
+          <button onclick="toggleCategory('documents')" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none" title="Documents — Click to disable">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#00e599]"></span>
+            <span>Documents</span>
+          </button>
+          <button onclick="toggleCategory('code')" class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-slate-200 border border-white/10 flex items-center gap-1.5 transition cursor-pointer select-none" title="Source Code — Click to enable">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+            <span>Source Code</span>
+          </button>
+          <button onclick="toggleCategory('models3d')" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none" title="3D Models — Click to disable">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#00e599]"></span>
+            <span>3D Models</span>
+          </button>
+          <button onclick="toggleCategory('music')" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none" title="Music — Click to disable">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#00e599]"></span>
+            <span>Music</span>
+          </button>
+          <button onclick="toggleCategory('video')" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none" title="Video — Click to disable">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#00e599]"></span>
+            <span>Video</span>
+          </button>
+          <button onclick="toggleCategory('archives')" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none" title="Archives — Click to disable">
+            <span class="w-1.5 h-1.5 rounded-full bg-[#00e599]"></span>
+            <span>Archives</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Add Tag Form -->
-      <div class="flex gap-2 pt-2 border-t border-white/[0.05]">
-        <input id="new-exempt-input" type="text" placeholder="Add extension (e.g. .csv, .log, .json)..." 
-               class="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono w-64"
-               onkeydown="if(event.key==='Enter') addExemption()" />
-        <button onclick="addExemption()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-xs shadow-sm">
-          + Add
-        </button>
+      <!-- Custom File Extensions Section -->
+      <div class="pt-3 border-t border-white/[0.05] space-y-2">
+        <div class="flex items-center justify-between text-[11px] text-slate-400">
+          <span class="font-medium">Custom File Types:</span>
+          <span id="custom-count" class="text-[10px] text-slate-500 font-mono">0 custom</span>
+        </div>
+
+        <!-- Custom Tags List Container -->
+        <div id="exempt-tags" class="flex flex-wrap gap-1.5 min-h-[28px] items-center">
+          <div class="text-slate-500 italic text-xs">Loading custom extensions...</div>
+        </div>
+
+        <!-- Add Custom Tag Form -->
+        <div class="flex gap-2 pt-1">
+          <input id="new-exempt-input" type="text" placeholder="Add custom extension (e.g. .csv, .parquet, .log)..." 
+                 class="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono w-72"
+                 onkeydown="if(event.key==='Enter') addExemption()" />
+          <button onclick="addExemption()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-xs shadow-sm cursor-pointer">
+            + Add
+          </button>
+        </div>
       </div>
 
       <!-- Scope note explaining persistence -->
@@ -289,13 +267,13 @@
           <svg class="w-4 h-4 text-cyan-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
-          SQLite FTS5 Search Inspector
+          Search Indexed Files &amp; Outputs
         </div>
-        <span class="text-[10px] text-slate-400 font-mono">BM25 Stemming &amp; Trigram RRF</span>
+        <span class="text-[10px] text-slate-400 font-mono">Keyword &amp; Substring Search</span>
       </div>
       
       <div class="flex gap-2">
-        <input id="search-input" type="text" placeholder="Search indexed logs, error patterns, symbols..." 
+        <input id="search-input" type="text" placeholder="Search indexed files, code, data, error patterns, symbols..." 
                class="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
                onkeydown="if(event.key==='Enter') executeSearch()" />
         <button onclick="executeSearch()" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold transition text-xs shadow-md">
@@ -313,7 +291,7 @@
           <svg class="w-4 h-4 text-purple-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          Recent Indexed Sources
+          Recent Indexed Sources &amp; Interceptions
         </div>
         <button id="purge-btn" onclick="handlePurgeClick()" class="text-[11px] px-2.5 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 transition">
           Purge Session
@@ -324,11 +302,117 @@
       </div>
     </div>
 
+    <!-- Combined Lifecycle Gates & Engine Health Card -->
+    <div class="p-3.5 sm:p-4 rounded-xl bg-[#181a28] border border-white/[0.07] space-y-4">
+      <!-- Section 1: Active Lifecycle Gates -->
+      <div>
+        <div class="flex items-center gap-2 text-xs font-bold text-slate-200">
+          <svg class="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Active Lifecycle Gates
+        </div>
+        <div class="mt-2.5 space-y-2 text-[11px]">
+          <div class="flex items-start gap-2" title="Prevents huge files from overflowing the LLM context window by requiring line ranges or targeted searches">
+            <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
+            <div class="leading-relaxed">
+              <strong class="font-mono text-slate-200 font-semibold">PreToolUse (read_file):</strong> 
+              <span id="gate-read-cutoff" class="text-slate-400">Blocks files &gt;8 KB un-paged; requires line slices (&le;200 lines)</span>
+            </div>
+          </div>
+          <div class="flex items-start gap-2" title="Prevents massive terminal command outputs from flooding the context window and causing model forgetfulness">
+            <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
+            <div class="leading-relaxed">
+              <strong class="font-mono text-slate-200 font-semibold">PreToolUse (run_command):</strong> 
+              <span class="text-slate-400">Intercepts unbounded command output (<code class="text-slate-300">cat</code>, <code class="text-slate-300">Get-Content</code>, <code class="text-slate-300">git diff</code>)</span>
+            </div>
+          </div>
+          <div class="flex items-start gap-2" title="Guides the AI to summarize and search data offline instead of dumping full files into context">
+            <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
+            <div class="leading-relaxed">
+              <strong class="font-mono text-slate-200 font-semibold">SessionStart:</strong> 
+              <span class="text-slate-400">Auto-injects guidance &amp; state recovery pointers</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section 2: Engine & Storage Health -->
+      <div class="border-t border-white/[0.06] pt-3.5">
+        <div class="flex items-center justify-between mb-2.5">
+          <div class="flex items-center gap-2 text-xs font-bold text-slate-200">
+            <svg class="w-4 h-4 text-indigo-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
+            </svg>
+            Engine &amp; Storage Health
+          </div>
+          <span id="doctor-status" class="text-[11px] font-mono font-bold text-[#00e599]">HEALTHY</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <div class="p-2 rounded-lg bg-[#121420] border border-white/[0.05]" title="Local native SQLite database engine for instant background storage">
+            <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">STORAGE</div>
+            <div class="text-xs font-mono font-semibold text-slate-200 mt-0.5">SQLite (WAL)</div>
+          </div>
+          <div class="p-2 rounded-lg bg-[#121420] border border-white/[0.05]" title="Hybrid search combining full-text keywords with substring matching for pinpoint accuracy">
+            <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">SEARCH MODE</div>
+            <div class="text-xs font-mono font-semibold text-slate-200 mt-0.5">Hybrid (BM25 + Tri)</div>
+          </div>
+          <div class="p-2 rounded-lg bg-[#121420] border border-white/[0.05] col-span-2 sm:col-span-1" title="Maximum preview slice of command/script output returned into context; full output remains indexed offline and queryable via search">
+            <div class="text-[9px] font-mono text-slate-500 uppercase tracking-wider font-semibold">PREVIEW LIMIT</div>
+            <div id="sandbox-cap" class="text-xs font-mono font-semibold text-slate-200 mt-0.5">16 KB preview</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
     let currentScope = 'conversation';
     let cachedStats = null;
+    let isProtectionPaused = false;
+
+    function updateActiveBadge(isPaused) {
+      isProtectionPaused = Boolean(isPaused);
+      const btn = document.getElementById('toggle-active-btn');
+      const dot = document.getElementById('active-dot');
+      const text = document.getElementById('active-text');
+      if (!btn || !dot || !text) return;
+
+      if (isProtectionPaused) {
+        btn.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 transition cursor-pointer select-none';
+        btn.title = 'Context Mode is paused — click to activate';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-amber-400';
+        text.innerText = 'Paused';
+      } else {
+        btn.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none';
+        btn.title = 'Context Mode is active — click to pause';
+        dot.className = 'w-1.5 h-1.5 rounded-full bg-[#00e599]';
+        text.innerText = 'Active';
+      }
+    }
+
+    async function toggleActiveState() {
+      try {
+        const nextPaused = !isProtectionPaused;
+        updateActiveBadge(nextPaused); // optimistic update
+
+        const params = new URLSearchParams(window.location.search);
+        const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+        const url = `/api/toggle-active?scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}&paused=${nextPaused}`;
+
+        const res = await apiFetch(url, { method: 'POST', body: JSON.stringify({ paused: nextPaused }) });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.isPaused !== undefined) {
+            updateActiveBadge(data.isPaused);
+          }
+        }
+      } catch (e) {
+        console.error('Failed to toggle active state', e);
+        updateActiveBadge(isProtectionPaused);
+      }
+    }
 
     function setScope(scope) {
       currentScope = scope;
@@ -484,27 +568,149 @@
       }
     }
 
-    function updateExemptionsList(s) {
-      const container = document.getElementById('exempt-tags');
-      if (!container) return;
-      let list = [];
+    const DEFAULT_CATEGORIES_META = [
+      { id: 'images', name: 'Images', extensions: ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.bmp', '.ico', '.tiff', '.psd'] },
+      { id: 'documents', name: 'Documents', extensions: ['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.pptx', '.ppt', '.odt', '.rtf'] },
+      { id: 'code', name: 'Source Code', extensions: ['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx', '.py', '.rs', '.go', '.java', '.c', '.cpp', '.h', '.cs', '.html', '.css', '.json', '.yaml', '.yml', '.sql', '.sh', '.ps1'] },
+      { id: 'models3d', name: '3D Models', extensions: ['.blend', '.fbx', '.obj', '.gltf', '.glb', '.stl', '.dae', '.3ds', '.step', '.iges'] },
+      { id: 'music', name: 'Music', extensions: ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.wma', '.midi'] },
+      { id: 'video', name: 'Video', extensions: ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.flv', '.wmv', '.m4v'] },
+      { id: 'archives', name: 'Archives', extensions: ['.zip', '.tar', '.gz', '.7z', '.rar', '.wasm'] }
+    ];
+
+    const DEFAULT_ACTIVE_CATEGORIES = ['images', 'documents', 'models3d', 'music', 'video', 'archives'];
+
+    function getActiveCategories(s) {
+      if (!s) return [...DEFAULT_ACTIVE_CATEGORIES];
+      let list = null;
       if (currentScope === 'lifetime') {
-        list = s.globalExemptExtensions || [];
+        list = s.globalExemptCategories;
       } else if (currentScope === 'app') {
-        list = s.appExemptExtensions || s.globalExemptExtensions || [];
+        list = s.appExemptCategories || s.globalExemptCategories;
       } else {
-        list = s.conversationExemptExtensions || s.exemptExtensions || [];
+        list = s.conversationExemptCategories || s.exemptCategories;
+      }
+      return Array.isArray(list) ? list : [...DEFAULT_ACTIVE_CATEGORIES];
+    }
+
+    function setActiveCategories(s, cats) {
+      if (!s) return;
+      s.exemptCategories = cats;
+      if (currentScope === 'lifetime') {
+        s.globalExemptCategories = cats;
+      } else if (currentScope === 'app') {
+        s.appExemptCategories = cats;
+      } else {
+        s.conversationExemptCategories = cats;
+      }
+    }
+
+    function updateExemptionsList(s) {
+      // 1. Update Category Toggles (styled as pills like 'Active' badge)
+      const categoriesContainer = document.getElementById('category-toggles');
+      const catSummary = document.getElementById('category-summary');
+      const categoriesList = s && s.fileCategories && s.fileCategories.length ? s.fileCategories : DEFAULT_CATEGORIES_META;
+      const activeCats = getActiveCategories(s);
+
+      if (categoriesContainer) {
+        categoriesContainer.innerHTML = categoriesList.map(cat => {
+          const isActive = activeCats.includes(cat.id);
+          const extCount = cat.extensions ? cat.extensions.length : 0;
+          const extSample = cat.extensions ? cat.extensions.slice(0, 6).join(', ') + (cat.extensions.length > 6 ? ', ...' : '') : '';
+          const tooltip = `${cat.name} (${extCount} types: ${extSample}) — Click to ${isActive ? 'disable' : 'enable'}`;
+
+          if (isActive) {
+            return `
+              <button onclick="toggleCategory('${cat.id}')" 
+                      class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-[#00e599] border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer select-none"
+                      title="${tooltip}">
+                <span class="w-1.5 h-1.5 rounded-full bg-[#00e599]"></span>
+                <span>${cat.name}</span>
+              </button>
+            `;
+          } else {
+            return `
+              <button onclick="toggleCategory('${cat.id}')" 
+                      class="px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-slate-200 border border-white/10 flex items-center gap-1.5 transition cursor-pointer select-none"
+                      title="${tooltip}">
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
+                <span>${cat.name}</span>
+              </button>
+            `;
+          }
+        }).join('');
       }
 
-      if (list && list.length > 0) {
-        container.innerHTML = list.map(ext => `
-          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-mono text-xs">
-            <span>${ext}</span>
-            <button onclick="removeExemption('${ext}')" class="hover:text-rose-400 text-slate-400 font-bold ml-1 transition" title="Remove exemption">×</button>
-          </span>
-        `).join('');
-      } else {
-        container.innerHTML = '<span class="text-slate-500 italic text-xs">No extensions exempted.</span>';
+      if (catSummary) {
+        catSummary.innerText = `${activeCats.length} of ${categoriesList.length} active`;
+      }
+
+      // 2. Update Custom File Extension Tags
+      const tagsContainer = document.getElementById('exempt-tags');
+      const customCount = document.getElementById('custom-count');
+      let customList = [];
+      if (s) {
+        if (currentScope === 'lifetime') {
+          customList = s.globalCustomExtensions || [];
+        } else if (currentScope === 'app') {
+          customList = s.appCustomExtensions || s.globalCustomExtensions || [];
+        } else {
+          customList = s.conversationCustomExtensions || s.customExtensions || [];
+        }
+      }
+
+      if (tagsContainer) {
+        if (customList && customList.length > 0) {
+          tagsContainer.innerHTML = customList.map(ext => `
+            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-mono text-[11px]">
+              <span>${ext}</span>
+              <button onclick="removeExemption('${ext}')" class="hover:text-rose-400 text-slate-400 font-bold ml-1 transition cursor-pointer" title="Remove custom exemption">×</button>
+            </span>
+          `).join('');
+        } else {
+          tagsContainer.innerHTML = '<span class="text-slate-500 italic text-xs">No custom file types added. Use input below to exempt custom extensions.</span>';
+        }
+      }
+
+      if (customCount) {
+        customCount.innerText = `${customList.length} custom`;
+      }
+    }
+
+    async function toggleCategory(categoryId) {
+      if (!cachedStats) cachedStats = {};
+      const activeCats = getActiveCategories(cachedStats);
+      const isCurrentlyActive = activeCats.includes(categoryId);
+      const nextActive = isCurrentlyActive 
+        ? activeCats.filter(c => c !== categoryId)
+        : [...activeCats, categoryId];
+
+      // 1. Instant optimistic update
+      setActiveCategories(cachedStats, nextActive);
+      updateExemptionsList(cachedStats);
+
+      // 2. Dispatch to server
+      const params = new URLSearchParams(window.location.search);
+      const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+      try {
+        const queryUrl = `/api/exemptions?action=toggleCategory&category=${encodeURIComponent(categoryId)}&scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
+        const res = await apiFetch(queryUrl, { 
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'toggleCategory', category: categoryId, scope: currentScope, conversationId: convId })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.exemptCategories) {
+            setActiveCategories(cachedStats, data.exemptCategories);
+            updateExemptionsList(cachedStats);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to toggle category:", err);
+        // Rollback on error
+        setActiveCategories(cachedStats, activeCats);
+        updateExemptionsList(cachedStats);
       }
     }
 
@@ -542,7 +748,7 @@
     }
 
     async function resetExemptions() {
-      if (!confirm("Reset exempt file extensions to standard defaults (.pdf, .png, .jpg, media, etc.)?")) return;
+      if (!confirm("Reset file categories to defaults and clear custom extensions?")) return;
       const params = new URLSearchParams(window.location.search);
       const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
 
@@ -570,9 +776,16 @@
         const s = await statsRes.json();
         cachedStats = s;
 
-        // Update cutoff dropdown
+        // Update cutoff dropdown and status
         updateCutoffDropdown(s);
         updateExemptionsList(s);
+        if (s.isPaused !== undefined) {
+          updateActiveBadge(s.isPaused);
+        }
+        if (s.version) {
+          const verEl = document.getElementById('dashboard-version');
+          if (verEl) verEl.innerText = s.version.startsWith('v') ? s.version : `v${s.version}`;
+        }
 
         if (s.sandboxCapBytes) {
           document.getElementById('sandbox-cap').innerText = formatBytes(s.sandboxCapBytes) + " preview";
@@ -596,18 +809,23 @@
         document.getElementById('chunks-count').innerText = chunks;
         document.getElementById('sources-count').innerText = `in ${sources} ${sources === 1 ? 'source' : 'sources'}`;
 
-        // Update Payload Comparison
+        // Update Dual-color Context Savings Progress Bar
+        const badgeEl = document.getElementById('comparison-badge');
+        const savedFillEl = document.getElementById('bar-saved-fill');
+        const usedFillEl = document.getElementById('bar-used-fill');
+
         if (totalRaw > 0) {
-          document.getElementById('comparison-badge').innerText = `${rateStr} smaller in context`;
-          document.getElementById('bar-raw-label').innerText = `${formatBytes(totalRaw)} (100%)`;
-          const pctReturned = ((totalRet / totalRaw) * 100);
-          document.getElementById('bar-returned-label').innerText = `${formatBytes(totalRet)} (${pctReturned.toFixed(1)}%)`;
-          document.getElementById('bar-returned-fill').style.width = Math.max(0.8, Math.min(100, pctReturned)) + "%";
+          const savedPct = Math.max(0, Math.min(100, rawRate));
+          const usedPct = Math.max(0, 100 - savedPct);
+
+          if (badgeEl) badgeEl.innerText = `${rateStr} saved`;
+          if (savedFillEl) savedFillEl.style.width = `${savedPct}%`;
+          if (usedFillEl) usedFillEl.style.width = `${usedPct}%`;
         } else {
-          document.getElementById('comparison-badge').innerText = "Standby (Ready)";
-          document.getElementById('bar-raw-label').innerText = "0 B (100%)";
-          document.getElementById('bar-returned-label').innerText = "0 B (0%)";
-          document.getElementById('bar-returned-fill').style.width = "0%";
+          const savedPct = Math.max(0, Math.min(100, rawRate));
+          if (badgeEl) badgeEl.innerText = rawRate > 0 ? `${rateStr} saved` : "0.0% saved";
+          if (savedFillEl) savedFillEl.style.width = `${savedPct}%`;
+          if (usedFillEl) usedFillEl.style.width = '0%';
         }
 
         // Doctor health
@@ -628,26 +846,64 @@
           const r = await resumeRes.json();
           const sourcesDiv = document.getElementById('sources-list');
 
+          function formatItemPath(p) {
+            if (!p) return "";
+            const normalized = p.replace(/\\/g, "/");
+            const parts = normalized.split("/").filter(Boolean);
+            if (parts.length <= 3) return parts.join("/");
+            return parts.slice(-3).join("/");
+          }
+
+          const items = [];
+          if (r.recentEvents && r.recentEvents.length > 0) {
+            const interceptions = r.recentEvents.filter(ev => ev.kind === 'interception');
+            for (const ev of interceptions) {
+              const displayPath = formatItemPath(ev.path || ev.tool);
+              items.push(`
+                <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 flex justify-between items-center gap-3 transition" 
+                     title="Intercepted by Context Mode to reduce context size: ${ev.path || ev.tool}">
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400 flex-shrink-0"></span>
+                    <span class="truncate text-xs font-mono">
+                      <span class="font-bold text-rose-300">Blocked ${ev.tool}:</span> 
+                      <span class="text-slate-200">${displayPath}</span>
+                    </span>
+                  </div>
+                  <div class="flex items-center gap-1.5 flex-shrink-0 font-mono text-[11px]">
+                    <span class="text-rose-400 font-bold">${formatBytes(ev.sandbox_bytes || 0)}</span>
+                    <span class="text-slate-500 text-[10px]">saved</span>
+                  </div>
+                </div>
+              `);
+            }
+          }
+
           if (r.recentSources && r.recentSources.length > 0) {
-            sourcesDiv.innerHTML = r.recentSources.map(src => `
-              <div onclick="inspectSource('${src.id}', '${encodeURIComponent(src.label)}')" 
-                   class="p-2 rounded-lg bg-black/40 hover:bg-white/[0.06] border border-white/5 hover:border-indigo-500/40 flex justify-between items-center cursor-pointer transition group" 
-                   title="Click to view indexed chunks in Search Inspector">
-                <div class="flex items-center gap-2 truncate max-w-[210px]">
-                  <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 group-hover:scale-125 transition-transform flex-shrink-0"></span>
-                  <span class="truncate text-slate-300 group-hover:text-white font-medium text-xs">${src.label}</span>
+            for (const src of r.recentSources) {
+              items.push(`
+                <div onclick="inspectSource('${src.id}', '${encodeURIComponent(src.label)}')" 
+                     class="p-2 rounded-lg bg-black/40 hover:bg-white/[0.06] border border-white/5 hover:border-indigo-500/40 flex justify-between items-center gap-3 cursor-pointer transition group" 
+                     title="Click to view indexed chunks in Search Inspector: ${src.label}">
+                  <div class="flex items-center gap-2 min-w-0 flex-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-indigo-400 group-hover:scale-125 transition-transform flex-shrink-0"></span>
+                    <span class="truncate text-slate-300 group-hover:text-white font-medium text-xs font-mono">${src.label}</span>
+                  </div>
+                  <div class="flex items-center gap-1.5 flex-shrink-0 font-mono text-[11px]">
+                    <span class="text-indigo-400">${formatBytes(src.bytes_total)}</span>
+                    <span class="text-slate-500 text-[10px]">(${src.chunk_count} ${src.chunk_count === 1 ? 'chunk' : 'chunks'})</span>
+                    <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
                 </div>
-                <div class="flex items-center gap-1.5 flex-shrink-0 font-mono text-[11px]">
-                  <span class="text-indigo-400">${formatBytes(src.bytes_total)}</span>
-                  <span class="text-slate-500 text-[10px]">(${src.chunk_count} ${src.chunk_count === 1 ? 'chunk' : 'chunks'})</span>
-                  <svg class="w-3.5 h-3.5 text-slate-500 group-hover:text-indigo-400 transition ml-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                  </svg>
-                </div>
-              </div>
-            `).join('');
+              `);
+            }
+          }
+
+          if (items.length > 0) {
+            sourcesDiv.innerHTML = items.join('');
           } else {
-            sourcesDiv.innerHTML = '<div class="text-slate-500 italic">No indexed sources in current view</div>';
+            sourcesDiv.innerHTML = '<div class="text-slate-500 italic">No indexed sources or interceptions in current view</div>';
           }
         }
 
@@ -664,14 +920,14 @@
           scopeLabel = `CONVERSATION (${convId.slice(0, 8)}...)`;
         }
         document.getElementById('telemetry-source').innerHTML = `
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live Telemetry: <span class="font-semibold text-slate-200">${scopeLabel}</span>
+          Showing stats for: <span class="font-semibold text-slate-200">${scopeLabel}</span>
         `;
 
       } catch (err) {
         console.error("Telemetry refresh failed:", err);
         document.getElementById('last-updated-text').innerText = `Error: ${err.message}`;
         document.getElementById('telemetry-source').innerHTML = `
-          <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span> Disconnected
+          Showing stats for: <span class="text-rose-400 font-semibold">Disconnected</span>
         `;
       } finally {
         if (refreshIcon) {

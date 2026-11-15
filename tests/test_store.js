@@ -88,6 +88,73 @@ test("ContextModeStore - initialization, FTS5 schema, indexing, and RRF search",
 
     const statsAfterPurge = store.getStats("session-1");
     assert.equal(statsAfterPurge.calls, 0);
+
+    // Active/Paused state toggle
+    assert.equal(store.isPaused("session-1"), false);
+    store.setPaused(true, "session-1");
+    assert.equal(store.isPaused("session-1"), true);
+    store.setPaused(false, "session-1");
+    assert.equal(store.isPaused("session-1"), false);
+  } finally {
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("ContextModeStore - file category toggles and custom extensions", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctxm-test-cats-"));
+  const dbPath = path.join(tmpDir, "test.db");
+  const store = new ContextModeStore({ dbPath });
+
+  try {
+    const sid = "test-session-cats";
+
+    // 1. Defaults: Standard media/doc categories active, code inactive
+    const defaultCats = store.getExemptCategories(sid);
+    assert.ok(defaultCats.includes("images"));
+    assert.ok(defaultCats.includes("documents"));
+    assert.ok(defaultCats.includes("models3d"));
+    assert.ok(defaultCats.includes("music"));
+    assert.ok(defaultCats.includes("video"));
+    assert.ok(defaultCats.includes("archives"));
+    assert.equal(defaultCats.includes("code"), false);
+
+    const defaultCustoms = store.getCustomExemptExtensions(sid);
+    assert.deepEqual(defaultCustoms, []);
+
+    const defaultExts = store.getExemptExtensions(sid);
+    assert.ok(defaultExts.includes(".png"));
+    assert.ok(defaultExts.includes(".pdf"));
+    assert.ok(defaultExts.includes(".blend"));
+    assert.ok(defaultExts.includes(".mp3"));
+    assert.equal(defaultExts.includes(".py"), false);
+
+    // 2. Toggle code ON
+    store.toggleExemptCategory("code", true, sid);
+    assert.ok(store.getExemptCategories(sid).includes("code"));
+    assert.ok(store.getExemptExtensions(sid).includes(".py"));
+    assert.ok(store.getExemptExtensions(sid).includes(".js"));
+
+    // 3. Toggle code OFF
+    store.toggleExemptCategory("code", false, sid);
+    assert.equal(store.getExemptCategories(sid).includes("code"), false);
+    assert.equal(store.getExemptExtensions(sid).includes(".py"), false);
+
+    // 4. Add custom extension
+    store.addCustomExemptExtension(".parquet", sid);
+    assert.deepEqual(store.getCustomExemptExtensions(sid), [".parquet"]);
+    assert.ok(store.getExemptExtensions(sid).includes(".parquet"));
+
+    // 5. Remove custom extension
+    store.removeCustomExemptExtension(".parquet", sid);
+    assert.deepEqual(store.getCustomExemptExtensions(sid), []);
+    assert.equal(store.getExemptExtensions(sid).includes(".parquet"), false);
+
+    // 6. Reset exemptions
+    store.setExemptExtensions(null, sid);
+    assert.deepEqual(store.getCustomExemptExtensions(sid), []);
+    assert.equal(store.getExemptCategories(sid).includes("code"), false);
+    assert.ok(store.getExemptCategories(sid).includes("images"));
   } finally {
     store.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
