@@ -24,7 +24,8 @@ jobs:
       - name: Run Tests
         run: npm test
 
+      - name: Check npm version
+        run: npm --version
+
       - name: Publish to npm
         run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN || secrets.NODE_AUTH_TOKEN }}
