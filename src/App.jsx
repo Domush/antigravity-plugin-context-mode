@@ -33,7 +33,9 @@ import {
   Tag,
   ArrowLeft,
   BookOpen,
-  LayoutDashboard
+  LayoutDashboard,
+  FolderGit2,
+  FileSpreadsheet
 } from 'lucide-react';
 
 // Pre-structured static fallback changelog data
@@ -182,7 +184,6 @@ const BUNDLED_CHANGELOG = [
   }
 ];
 
-// Parser function to parse raw markdown changelog into structured JSON
 function parseMarkdownToChangelog(markdown) {
   try {
     const lines = markdown.split('\n');
@@ -193,7 +194,6 @@ function parseMarkdownToChangelog(markdown) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i].trim();
 
-      // Version header: e.g. ## [1.3.0] - 2026-11-15
       const versionMatch = line.match(/^##\s+\[?v?([0-9]+\.[0-9]+\.[0-9]+)\]?\s*(?:-\s*([0-9]{4}-[0-9]{2}-[0-9]{2}))?/);
       if (versionMatch) {
         if (currentRelease) releases.push(currentRelease);
@@ -246,8 +246,7 @@ function parseMarkdownToChangelog(markdown) {
 }
 
 export default function App() {
-  // Navigation & Page State
-  const [currentPage, setCurrentPage] = useState('home'); // 'home' | 'changelog'
+  const [currentPage, setCurrentPage] = useState('home');
   const [copiedCmd, setCopiedCmd] = useState(false);
   const [copiedToolCode, setCopiedToolCode] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -256,14 +255,14 @@ export default function App() {
   const [latestVersion, setLatestVersion] = useState('1.3.0');
   const [isLiveVersion, setIsLiveVersion] = useState(false);
   const [changelogData, setChangelogData] = useState(BUNDLED_CHANGELOG);
-  const [changelogLoading, setChangelogLoading] = useState(false);
 
   // Changelog Filtering State
   const [changelogSearch, setChangelogSearch] = useState('');
-  const [changelogFilterType, setChangelogFilterType] = useState('all'); // 'all' | 'added' | 'fixed'
+  const [changelogFilterType, setChangelogFilterType] = useState('all');
 
   // Playground / Simulator State
   const [selectedWorkload, setSelectedWorkload] = useState('crash_dump');
+  const [workloadCategory, setWorkloadCategory] = useState('all');
   const [cutoffKb, setCutoffKb] = useState(8);
   const [isProtected, setIsProtected] = useState(true);
   const [searchTerm, setSearchTerm] = useState('SIGSEGV');
@@ -278,17 +277,13 @@ export default function App() {
 
   // FAQ Accordion State
   const [openFaq, setOpenFaq] = useState(0);
-
-  // OS config tab
   const [osTab, setOsTab] = useState('windows');
 
-  // Format helper for bytes
   const formatSize = (kb) => {
     if (kb >= 1024) return `${(kb / 1024).toFixed(0)} MB`;
     return `${kb} KB`;
   };
 
-  // Sync hash routing with page state
   useEffect(() => {
     const handleHash = () => {
       if (window.location.hash === '#changelog') {
@@ -304,9 +299,7 @@ export default function App() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  // Fetch live plugin metadata from NPM & GitHub on mount
   useEffect(() => {
-    // 1. Fetch live version from NPM Registry API
     fetch('https://registry.npmjs.org/antigravity-plugin-context-mode/latest')
       .then((res) => {
         if (!res.ok) throw new Error('NPM API error');
@@ -320,8 +313,6 @@ export default function App() {
       })
       .catch(() => {});
 
-    // 2. Fetch live CHANGELOG.md from GitHub main branch
-    setChangelogLoading(true);
     fetch('https://raw.githubusercontent.com/Domush/antigravity-plugin-context-mode/main/CHANGELOG.md')
       .then((res) => {
         if (!res.ok) throw new Error('GitHub Raw error');
@@ -333,13 +324,9 @@ export default function App() {
           setChangelogData(parsed);
         }
       })
-      .catch(() => {})
-      .finally(() => {
-        setChangelogLoading(false);
-      });
+      .catch(() => {});
   }, []);
 
-  // Navigation helper
   const navigateTo = (page, anchorId = null) => {
     setCurrentPage(page);
     setMobileMenuOpen(false);
@@ -359,7 +346,6 @@ export default function App() {
     }
   };
 
-  // Copy helper
   const handleCopy = (text, type = 'cmd') => {
     navigator.clipboard.writeText(text);
     if (type === 'cmd') {
@@ -371,17 +357,18 @@ export default function App() {
     }
   };
 
-  // Workload data dictionary
+  // Comprehensive Workload Dictionary including Crash Dumps, 350+ Server Logs, and 15,000-File Monorepo
   const workloads = {
     crash_dump: {
-      name: 'crash_dump.dmp / heap.log',
+      category: 'enterprise',
+      name: 'read_file("crash_dump.dmp")',
       type: '100 MB Crash Dump',
       rawKb: 102400, // 100 MB
       rawTokens: 25600000, // ~25.6M tokens
       lines: 1850000,
       description: 'Agent attempting an unbounded read of a 100 MB native application crash dump with stack traces and memory registers.',
       rawSample: `[DUMP HEADER] SIGSEGV (0x00007fff8921a000) Crash Thread: 0x7fa2
-Process: unity_engine_editor.exe | Subsystem: VulkanCore
+Process: engine_server.exe | Subsystem: VulkanCore
 Registers: RAX=0x0000000000000000 RBX=0x0000000000000000 RCX=0x00007fa214b8
 ... [1,850,000 lines of register dumps, heap hex, and un-paged stack frames] ...
 [FAULTING INSTRUCTION] mov rax, [rbx + 0x18] (NullPointer dereference)
@@ -393,9 +380,52 @@ Stacktrace: at RenderBufferPool.AllocateHeap(buffer.cc:842)
 Resolution: Initialize SwapChain RenderTargetBuffer prior to invocation.`,
       filteredTokens: 88,
     },
+    logs_cluster: {
+      category: 'enterprise',
+      name: 'grep -rn "502 Bad Gateway" /var/log/nginx/*.log',
+      type: '350+ Rotating Logs',
+      rawKb: 491520, // 480 MB
+      rawTokens: 122880000, // 122.8M tokens
+      lines: 4200000,
+      description: 'Agent attempting recursive grep/read across 350 rotating NGINX and cluster logs for intermittent 502/504 gateway timeouts.',
+      rawSample: `[2026-11-16 02:14:08] 192.168.1.42 GET /api/v2/telemetry HTTP/1.1 200 142ms
+[2026-11-16 02:14:09] 192.168.1.18 POST /api/v2/auth HTTP/1.1 200 89ms
+... [4,200,000 lines of repetitive access logs across 350 .log files] ...
+[2026-11-16 03:22:41] 10.0.4.12 POST /api/v2/checkout HTTP/1.1 502 Bad Gateway upstream timed out (110: Connection timed out) while connecting to upstream: "http://10.0.12.88:8080/checkout"`,
+      filteredSnippet: `[SQLite FTS5 BM25 + Trigram RRF across 350 files (Query: "502 Bad Gateway upstream timed out")]:
+File: /var/log/nginx/access.2026-11-16.log:3,842,110
+[2026-11-16 03:22:41] POST /api/v2/checkout 502 Bad Gateway
+Upstream: 10.0.12.88:8080 (checkout-service-pod-3b)
+Root Cause: Upstream TCP SYN timeout (110: Connection timed out). 34 instances aggregated.`,
+      filteredTokens: 92,
+    },
+    monorepo_search: {
+      category: 'enterprise',
+      name: 'Full Monorepo Search ("deprecatedVerifyToken")',
+      type: '15,000-File Monorepo',
+      rawKb: 358400, // 350 MB
+      rawTokens: 89600000, // 89.6M tokens
+      lines: 3600000,
+      description: 'Agent searching across a 15,000-file repository to audit deprecated authentication call sites without flooding the prompt with whole files.',
+      rawSample: `// packages/auth/src/legacy/auth_v1.ts: 850 lines
+// packages/billing/src/payment_handler.ts: 1,420 lines
+... [3.6 million lines across 15,000 TypeScript, Python, and Go source files] ...
+import { deprecatedVerifyToken } from '@enterprise/auth-legacy';
+export async function handleBillingSession(token: string) {
+  return deprecatedVerifyToken(token, { bypassMfa: false });
+}`,
+      filteredSnippet: `[SQLite FTS5 Codebase Index: 15,000 files in ~/.context-mode/context.db]:
+Matches for "deprecatedVerifyToken": 2 call sites found in 4.8ms:
+1. packages/billing/src/session.ts:42
+   -> deprecatedVerifyToken(token, { bypassMfa: false })
+2. services/gateway/src/middleware/auth.ts:188
+   -> const session = await deprecatedVerifyToken(headerToken);`,
+      filteredTokens: 104,
+    },
     editor_log: {
-      name: 'Logs/Editor.log',
-      type: 'Log File',
+      category: 'dev',
+      name: 'Get-Content Logs/Editor.log',
+      type: 'Local Editor Trace',
       rawKb: 65,
       rawTokens: 16250,
       lines: 2450,
@@ -414,8 +444,9 @@ Resolution: Initialize SwapChain RenderTargetBuffer prior to invocation.`,
       filteredTokens: 85,
     },
     vitest_output: {
+      category: 'dev',
       name: 'vitest run --coverage',
-      type: 'Test Suite',
+      type: 'Full Test Runner',
       rawKb: 128,
       rawTokens: 32000,
       lines: 4800,
@@ -437,8 +468,9 @@ AssertionError: expected 'active' to equal 'past_due'
       filteredTokens: 112,
     },
     git_diff: {
-      name: 'git diff main..feature-auth',
-      type: 'VCS Diff',
+      category: 'dev',
+      name: 'git diff main..feature-branch',
+      type: 'VCS Multi-File Diff',
       rawKb: 92,
       rawTokens: 23000,
       lines: 3200,
@@ -456,38 +488,16 @@ File: src/api/auth.ts:44
 - export function verifySessionToken(token: string): boolean
 + export async function verifySessionToken(token: string, req: Request): Promise<AuthContext>`,
       filteredTokens: 96,
-    },
-    api_payload: {
-      name: 'fetch("https://api.internal/metrics")',
-      type: 'JSON Dump',
-      rawKb: 180,
-      rawTokens: 45000,
-      lines: 7200,
-      description: 'High-frequency telemetry payload with thousands of sensor nodes.',
-      rawSample: `{
-  "timestamp": 1731718000,
-  "nodes": [
-    {"id": 1, "cpu": 12.4, "temp": 42.1},
-    {"id": 2, "cpu": 98.9, "temp": 91.4, "status": "THERMAL_THROTTLING_CRITICAL"},
-    ... [7,190 lines of healthy node data] ...
-  ]
-}`,
-      filteredSnippet: `[Sandboxed Node.js ctx_execute: nodes.filter(n => n.cpu > 90)]:
-[
-  { "id": 2, "cpu": 98.9, "temp": 91.4, "status": "THERMAL_THROTTLING_CRITICAL" }
-]`,
-      filteredTokens: 72,
     }
   };
 
   const currentWorkload = workloads[selectedWorkload] || workloads.crash_dump;
   const isBlocked = isProtected && (cutoffKb > 0 && currentWorkload.rawKb > cutoffKb);
 
-  // Token calculations
   const effectiveTokens = isBlocked ? currentWorkload.filteredTokens : currentWorkload.rawTokens;
   const tokensSaved = currentWorkload.rawTokens - effectiveTokens;
   const percentSaved = ((tokensSaved / currentWorkload.rawTokens) * 100).toFixed(
-    currentWorkload.rawKb >= 1024 ? 3 : 1
+    currentWorkload.rawKb >= 1024 ? 4 : 1
   );
   const costDollars = (tokensSaved / 1_000_000) * 3.0;
   const savedCost = costDollars < 0.01 ? '< $0.01' : `$${costDollars.toFixed(2)}`;
@@ -558,12 +568,12 @@ const res = await call_mcp_tool({
         { name: 'limit', type: 'number', required: false, desc: 'Max ranked chunks to return (default: 5)' },
         { name: 'threshold', type: 'number', required: false, desc: 'Min score cutoff' }
       ],
-      exampleSnippet: `// Search for stacktrace occurrences in indexed logs
+      exampleSnippet: `// Search across 350 indexed logs or a 15,000-file monorepo
 const res = await call_mcp_tool({
   ServerName: "antigravity-plugin-context-mode_context-mode",
   ToolName: "ctx_search",
   Arguments: {
-    query: "NullPointerException RenderTargetBuffer",
+    query: "502 Bad Gateway upstream timed out",
     limit: 3
   }
 });`
@@ -578,12 +588,12 @@ const res = await call_mcp_tool({
         { name: 'pathOrUrl', type: 'string', required: true, desc: 'Local file path or web URL' },
         { name: 'chunkSize', type: 'number', required: false, desc: 'Tokens per chunk (default 500)' }
       ],
-      exampleSnippet: `// Index a 2,500-line API documentation file
+      exampleSnippet: `// Index an entire repository or large documentation
 const res = await call_mcp_tool({
   ServerName: "antigravity-plugin-context-mode_context-mode",
   ToolName: "ctx_index",
   Arguments: {
-    pathOrUrl: "./docs/complete-spec.md",
+    pathOrUrl: "./packages/auth/complete-spec.md",
     chunkSize: 400
   }
 });`
@@ -620,7 +630,7 @@ const res = await call_mcp_tool({
   ToolName: "ctx_stats",
   Arguments: {}
 });
-// Output: { totalQueries: 48, rawTokensIntercepted: 412000, deliveredTokens: 12400, savingsRatio: '96.9%' }`
+// Output: { totalQueries: 48, rawTokensIntercepted: 125000000, deliveredTokens: 14200, savingsRatio: '99.98%' }`
     },
     {
       id: 'ctx_resume',
@@ -670,12 +680,42 @@ const res = await call_mcp_tool({
     }
   ];
 
-  // Search Inspector Mock Data
+  // Search Inspector Mock Data with multi-log and monorepo matches
   const searchResults = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
     const mockDb = [
       {
         id: 1,
+        source: '/var/log/nginx/access.2026-11-16.log',
+        category: 'logs',
+        line: 3842110,
+        score: 29.2,
+        matchType: 'BM25 Exact (350 Logs Cluster)',
+        content: '[2026-11-16 03:22:41] POST /api/v2/checkout HTTP/1.1 502 Bad Gateway upstream timed out (110: Connection timed out)',
+        context: 'Log Cluster Search: Upstream 10.0.12.88:8080 timeout across 350 rotating server logs'
+      },
+      {
+        id: 2,
+        source: 'packages/billing/src/session.ts',
+        category: 'code',
+        line: 42,
+        score: 28.1,
+        matchType: 'Trigram Match (15,000 Files Monorepo)',
+        content: 'const authResult = await deprecatedVerifyToken(token, { bypassMfa: false });',
+        context: 'Monorepo Audit: Call site in billing microservice module'
+      },
+      {
+        id: 3,
+        source: 'services/gateway/src/middleware/auth.ts',
+        category: 'code',
+        line: 188,
+        score: 24.5,
+        matchType: 'BM25 Stemmed (15,000 Files Monorepo)',
+        content: 'const session = await deprecatedVerifyToken(headerToken, { enforceExpiry: true });',
+        context: 'Monorepo Audit: Call site in API Gateway edge middleware'
+      },
+      {
+        id: 4,
         source: 'crash_dump.dmp',
         category: 'logs',
         line: 1842010,
@@ -685,7 +725,7 @@ const res = await call_mcp_tool({
         context: '100 MB Crash Dump: RenderBufferPool::AllocateHeap() thread fault'
       },
       {
-        id: 2,
+        id: 5,
         source: 'Logs/Editor.log',
         category: 'logs',
         line: 412,
@@ -695,7 +735,7 @@ const res = await call_mcp_tool({
         context: 'Vulkan pipeline initialization failed while binding swapchain framebuffers'
       },
       {
-        id: 3,
+        id: 6,
         source: 'src/engine/vulkan_pipeline.cc',
         category: 'code',
         line: 412,
@@ -703,26 +743,6 @@ const res = await call_mcp_tool({
         matchType: 'BM25 Stemmed',
         content: 'if (!this->renderTargetBuffer) { throw NullPointerException("RenderTargetBuffer is uninitialized"); }',
         context: 'Subsystem: Vulkan backend framebuffer allocator'
-      },
-      {
-        id: 4,
-        source: 'tests/pipeline_test.cc',
-        category: 'tests',
-        line: 98,
-        score: 12.1,
-        matchType: 'Trigram Substring',
-        content: 'TEST(Pipeline, HandlesNullRenderTargetGracefully) { ... }',
-        context: 'Unit test suite verifying exception propagation'
-      },
-      {
-        id: 5,
-        source: 'docs/troubleshooting.md',
-        category: 'docs',
-        line: 54,
-        score: 8.5,
-        matchType: 'Trigram Match',
-        content: 'Common crash: If RenderTargetBuffer is uninitialized, verify that window surface has valid dimensions.',
-        context: 'Developer FAQ for Linux & Windows rendering targets'
       }
     ];
 
@@ -737,7 +757,6 @@ const res = await call_mcp_tool({
     });
   }, [searchTerm, searchActiveCategory]);
 
-  // Custom extension handlers
   const addCustomExtension = (e) => {
     e.preventDefault();
     let ext = customExtInput.trim().toLowerCase();
@@ -753,7 +772,6 @@ const res = await call_mcp_tool({
     setCustomExtensions(customExtensions.filter((e) => e !== ext));
   };
 
-  // FAQ items
   const faqs = [
     {
       q: 'Does Antigravity Context Mode send any files or prompt data over the internet?',
@@ -762,6 +780,10 @@ const res = await call_mcp_tool({
     {
       q: 'How does Context Mode differ from standard context compression or compaction?',
       a: 'Standard compaction happens reactively after your context window has already filled up, which causes severe "agent amnesia" (erasing earlier system prompt instructions and constraints). Context Mode is proactive: it uses a Pre-Tool-Use lifecycle hook to intercept massive outputs before they enter the prompt in the first place.'
+    },
+    {
+      q: 'How does Context Mode handle searching hundreds of rotating log files or a 15,000-file monorepo?',
+      a: 'Instead of having the agent execute an unbounded grep or dump 100MB+ of text into the conversation history, Context Mode indexes files into SQLite FTS5. The agent then runs ctx_search to execute a sub-5ms BM25 + Trigram query with Reciprocal Rank Fusion, returning only the exact ranked lines without polluting the prompt.'
     },
     {
       q: 'Are images, PDFs, and 3D models blocked by Context Mode?',
@@ -802,7 +824,6 @@ const res = await call_mcp_tool({
       {/* Main Navigation Header */}
       <header className="sticky top-0 z-50 backdrop-blur-md bg-slate-950/80 border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          {/* Logo & Brand */}
           <div
             onClick={() => navigateTo('home')}
             className="flex items-center gap-3 cursor-pointer group"
@@ -829,7 +850,6 @@ const res = await call_mcp_tool({
             </div>
           </div>
 
-          {/* Desktop Navigation Links */}
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
             <button
               onClick={() => navigateTo('home', 'how-it-works')}
@@ -841,7 +861,7 @@ const res = await call_mcp_tool({
               onClick={() => navigateTo('home', 'simulator')}
               className="hover:text-emerald-400 transition-colors"
             >
-              Simulator
+              Simulator & Scenarios
             </button>
             <button
               onClick={() => navigateTo('home', 'dashboard-screenshot')}
@@ -875,7 +895,6 @@ const res = await call_mcp_tool({
             </button>
           </nav>
 
-          {/* Action CTAs & Links */}
           <div className="hidden sm:flex items-center gap-3">
             <a
               href="https://github.com/Domush/antigravity-plugin-context-mode"
@@ -906,7 +925,6 @@ const res = await call_mcp_tool({
             </button>
           </div>
 
-          {/* Mobile menu button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden p-2 text-slate-400 hover:text-white"
@@ -918,7 +936,6 @@ const res = await call_mcp_tool({
           </button>
         </div>
 
-        {/* Mobile Dropdown */}
         {mobileMenuOpen && (
           <div className="md:hidden border-b border-slate-800 bg-slate-900 px-4 py-4 space-y-3">
             <button
@@ -931,7 +948,7 @@ const res = await call_mcp_tool({
               onClick={() => navigateTo('home', 'simulator')}
               className="block w-full text-left text-slate-300 hover:text-emerald-400"
             >
-              Live Simulator
+              Live Simulator & Scenarios
             </button>
             <button
               onClick={() => navigateTo('home', 'dashboard-screenshot')}
@@ -985,7 +1002,6 @@ const res = await call_mcp_tool({
       {currentPage === 'changelog' ? (
         <main className="py-12 sm:py-16">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-            {/* Back button & Breadcrumb */}
             <div className="mb-8 flex items-center justify-between">
               <button
                 onClick={() => navigateTo('home')}
@@ -1004,7 +1020,6 @@ const res = await call_mcp_tool({
               </div>
             </div>
 
-            {/* Header Section */}
             <div className="text-center max-w-3xl mx-auto mb-12 space-y-4">
               <div className="inline-flex items-center gap-2 bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full text-xs font-mono">
                 <BookOpen className="w-3.5 h-3.5" />
@@ -1019,7 +1034,6 @@ const res = await call_mcp_tool({
               </p>
             </div>
 
-            {/* Filter & Search Bar */}
             <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-4 sm:p-5 backdrop-blur-sm mb-10 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div className="relative w-full sm:w-96">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -1032,7 +1046,6 @@ const res = await call_mcp_tool({
                 />
               </div>
 
-              {/* Type Filter Buttons */}
               <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto">
                 <button
                   onClick={() => setChangelogFilterType('all')}
@@ -1067,7 +1080,6 @@ const res = await call_mcp_tool({
               </div>
             </div>
 
-            {/* Releases Timeline */}
             <div className="space-y-8">
               {filteredChangelog.length === 0 ? (
                 <div className="text-center py-16 bg-slate-900/40 border border-slate-800 rounded-xl font-mono text-xs text-slate-400">
@@ -1079,7 +1091,6 @@ const res = await call_mcp_tool({
                     key={rel.version}
                     className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 sm:p-8 backdrop-blur-sm hover:border-emerald-500/50 transition-colors duration-200 relative"
                   >
-                    {/* Release Header */}
                     <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4 mb-6">
                       <div className="flex items-center gap-3">
                         <span className="text-2xl font-extrabold text-white font-mono">
@@ -1108,7 +1119,6 @@ const res = await call_mcp_tool({
                       </div>
                     </div>
 
-                    {/* Added Section */}
                     {rel.added && rel.added.length > 0 && (
                       <div className="mb-6 space-y-3">
                         <div className="flex items-center gap-2">
@@ -1135,7 +1145,6 @@ const res = await call_mcp_tool({
                       </div>
                     )}
 
-                    {/* Fixed Section */}
                     {rel.fixed && rel.fixed.length > 0 && (
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
@@ -1166,7 +1175,6 @@ const res = await call_mcp_tool({
               )}
             </div>
 
-            {/* Bottom GitHub Link */}
             <div className="text-center mt-12 pt-8 border-t border-slate-800 text-xs text-slate-400">
               <span>View the complete commit history on GitHub: </span>
               <a
@@ -1192,7 +1200,6 @@ const res = await call_mcp_tool({
 
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center max-w-3xl mx-auto space-y-6">
-                {/* Tag Badge with Live NPM indicator */}
                 <div className="inline-flex items-center gap-2 bg-slate-900 border border-slate-800 px-3.5 py-1.5 rounded-full text-xs font-medium text-slate-300 shadow-sm">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
                   <span>Google Antigravity Agent Plugin</span>
@@ -1200,7 +1207,6 @@ const res = await call_mcp_tool({
                   <span className="text-emerald-400 font-mono">v{latestVersion} Published</span>
                 </div>
 
-                {/* H1 Heading */}
                 <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight text-white leading-tight">
                   Stop context bloat.{' '}
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400">
@@ -1209,13 +1215,11 @@ const res = await call_mcp_tool({
                   of prompt tokens.
                 </h1>
 
-                {/* Subtitle */}
                 <p className="text-lg sm:text-xl text-slate-300 leading-relaxed font-normal">
                   Keep your AI coding agents blazing fast, laser-focused, and free from agent amnesia.
-                  Intercepts runaway 100+ MB crash dumps, build traces, and unbounded file reads before they wreck your conversation history.
+                  Intercepts runaway 100+ MB crash dumps, rotating cluster logs, and massive monorepo file reads before they wreck your conversation history.
                 </p>
 
-                {/* Hero CTAs */}
                 <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
                   <a
                     href="#simulator"
@@ -1244,7 +1248,6 @@ const res = await call_mcp_tool({
                   </a>
                 </div>
 
-                {/* Install pill terminal */}
                 <div className="pt-2 max-w-lg mx-auto">
                   <div
                     onClick={() => handleCopy(`npm i antigravity-plugin-context-mode@${latestVersion}`)}
@@ -1262,7 +1265,7 @@ const res = await call_mcp_tool({
                 </div>
               </div>
 
-              {/* Key Metrics Strip - Accurate, Real Numbers */}
+              {/* Key Metrics Strip - Genuine, Calibrated Figures */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-16 max-w-5xl mx-auto">
                 <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-emerald-500/50 transition-colors duration-200">
                   <div className="flex items-center justify-between mb-2">
@@ -1270,7 +1273,7 @@ const res = await call_mcp_tool({
                     <Sparkles className="w-4 h-4 text-emerald-400" />
                   </div>
                   <div className="text-3xl font-extrabold text-white">90% – 99%+</div>
-                  <p className="text-xs text-slate-400 mt-1">Blocks dumps up to 100+ MB (25M+ tokens) per call</p>
+                  <p className="text-xs text-slate-400 mt-1">Blocks runaway dumps up to 100+ MB per call</p>
                 </div>
 
                 <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-emerald-500/50 transition-colors duration-200">
@@ -1319,7 +1322,6 @@ const res = await call_mcp_tool({
                 </p>
               </div>
 
-              {/* Dashboard Screenshot Frame */}
               <div className="relative rounded-2xl border border-slate-800 bg-slate-900/70 p-3 sm:p-5 backdrop-blur-sm shadow-2xl overflow-hidden max-w-4xl mx-auto group">
                 <div className="flex items-center justify-between pb-3 px-2 border-b border-slate-800/80 mb-4 text-xs font-mono text-slate-400">
                   <div className="flex items-center gap-2">
@@ -1366,12 +1368,12 @@ const res = await call_mcp_tool({
                   Why Unbounded Context Destroys Agents
                 </h2>
                 <p className="text-sm text-slate-400 mt-2">
-                  Every un-paged crash dump, build log, or raw terminal command dilutes your prompt and triggers agent amnesia.
+                  Whether reading a 100 MB crash dump or searching across 350 log files, unbounded commands exhaust context limits and cause agent amnesia.
                 </p>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-stretch">
-                {/* Without Context Mode (Red/Bloat) */}
+                {/* Without Context Mode */}
                 <div className="bg-slate-900/70 border border-red-900/40 rounded-xl p-6 backdrop-blur-sm relative flex flex-col justify-between">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -1380,12 +1382,12 @@ const res = await call_mcp_tool({
                         <h3 className="text-lg font-semibold text-white">Without Context Mode</h3>
                       </div>
                       <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded text-xs font-mono">
-                        Up to 25,000,000 Tokens Burned
+                        Up to 25M+ Tokens Dumped
                       </span>
                     </div>
 
                     <p className="text-xs text-slate-400">
-                      Standard tool runs dump massive crash files and logs directly into conversation memory:
+                      Standard tool runs dump massive crash dumps or 350+ log files directly into conversation memory:
                     </p>
 
                     <div className="bg-black/80 border border-slate-800 rounded-lg font-mono text-xs text-slate-300 p-4 space-y-1.5 overflow-hidden max-h-56">
@@ -1410,7 +1412,7 @@ const res = await call_mcp_tool({
                       </div>
                       <div className="flex items-center gap-2 text-red-400">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span><strong>Massive Cost:</strong> Single unbounded reads can burn $50.00+ on commercial API tokens.</span>
+                        <span><strong>Massive Cost:</strong> Single unbounded reads burn $50.00+ on commercial API tokens.</span>
                       </div>
                     </div>
                   </div>
@@ -1421,7 +1423,7 @@ const res = await call_mcp_tool({
                   </div>
                 </div>
 
-                {/* With Context Mode (Emerald/Shield) */}
+                {/* With Context Mode */}
                 <div className="bg-slate-900/70 border border-emerald-500/40 rounded-xl p-6 backdrop-blur-sm relative flex flex-col justify-between shadow-lg shadow-emerald-950/20">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
@@ -1476,7 +1478,7 @@ const res = await call_mcp_tool({
             </div>
           </section>
 
-          {/* Interactive Live Simulator / Playground */}
+          {/* Interactive Live Simulator & Scenarios Playground */}
           <section id="simulator" className="py-16 sm:py-24 border-t border-slate-900 bg-slate-950">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
@@ -1486,14 +1488,13 @@ const res = await call_mcp_tool({
                     Interactive Live Playground
                   </div>
                   <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                    Context Savings Simulator
+                    Context Savings Simulator & Scenarios
                   </h2>
                   <p className="text-sm text-slate-400 mt-1">
-                    Select a workload or toggle protection settings to see how Context Mode intercepts and compresses prompt loads.
+                    Select a real-world enterprise scenario to see how Context Mode intercepts and compresses prompt loads.
                   </p>
                 </div>
 
-                {/* Quick Status Pill */}
                 <div className="flex items-center gap-3 bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl text-xs font-mono">
                   <span className="text-slate-400">Engine State:</span>
                   <button
@@ -1511,39 +1512,72 @@ const res = await call_mcp_tool({
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Left Controls Column (4 cols) */}
-                <div className="lg:col-span-4 space-y-4">
+                {/* Left Controls Column (5 cols) */}
+                <div className="lg:col-span-5 space-y-4">
                   {/* Workload Picker */}
                   <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-5 backdrop-blur-sm space-y-3">
-                    <label className="text-xs font-mono text-slate-400 uppercase tracking-wider block">
-                      1. Select Workload
-                    </label>
-                    <div className="space-y-2">
-                      {Object.entries(workloads).map(([key, item]) => (
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-mono text-slate-400 uppercase tracking-wider block">
+                        1. Select Workload Scenario
+                      </label>
+                      <div className="flex bg-black/50 p-0.5 rounded border border-slate-800 text-[10px] font-mono">
                         <button
-                          key={key}
-                          onClick={() => {
-                            setSelectedWorkload(key);
-                            if (key === 'crash_dump') setSearchTerm('SIGSEGV');
-                            else if (key === 'editor_log') setSearchTerm('NullPointerException');
-                            else if (key === 'vitest_output') setSearchTerm('AssertionError');
-                            else if (key === 'git_diff') setSearchTerm('verifySessionToken');
-                          }}
-                          className={`w-full text-left p-3 rounded-lg border text-xs transition-all flex items-center justify-between ${
-                            selectedWorkload === key
-                              ? 'bg-emerald-500/10 border-emerald-500 text-white shadow-sm'
-                              : 'bg-black/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                          onClick={() => setWorkloadCategory('all')}
+                          className={`px-2 py-0.5 rounded transition-colors ${
+                            workloadCategory === 'all' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400'
                           }`}
                         >
-                          <div className="truncate pr-2">
-                            <div className="font-mono font-medium text-slate-200 truncate">{item.name}</div>
-                            <div className="text-[11px] text-slate-500">{item.type} • {item.lines.toLocaleString()} lines</div>
-                          </div>
-                          <span className="shrink-0 font-mono text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                            {formatSize(item.rawKb)}
-                          </span>
+                          All
                         </button>
-                      ))}
+                        <button
+                          onClick={() => setWorkloadCategory('enterprise')}
+                          className={`px-2 py-0.5 rounded transition-colors ${
+                            workloadCategory === 'enterprise' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400'
+                          }`}
+                        >
+                          Big Data (100MB+)
+                        </button>
+                        <button
+                          onClick={() => setWorkloadCategory('dev')}
+                          className={`px-2 py-0.5 rounded transition-colors ${
+                            workloadCategory === 'dev' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400'
+                          }`}
+                        >
+                          Dev
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      {Object.entries(workloads)
+                        .filter(([_, item]) => workloadCategory === 'all' || item.category === workloadCategory)
+                        .map(([key, item]) => (
+                          <button
+                            key={key}
+                            onClick={() => {
+                              setSelectedWorkload(key);
+                              if (key === 'crash_dump') setSearchTerm('SIGSEGV');
+                              else if (key === 'logs_cluster') setSearchTerm('502 Bad Gateway');
+                              else if (key === 'monorepo_search') setSearchTerm('deprecatedVerifyToken');
+                              else if (key === 'editor_log') setSearchTerm('NullPointerException');
+                              else if (key === 'vitest_output') setSearchTerm('AssertionError');
+                              else if (key === 'git_diff') setSearchTerm('verifySessionToken');
+                            }}
+                            className={`w-full text-left p-3 rounded-lg border text-xs transition-all flex items-center justify-between ${
+                              selectedWorkload === key
+                                ? 'bg-emerald-500/10 border-emerald-500 text-white shadow-sm'
+                                : 'bg-black/40 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                            }`}
+                          >
+                            <div className="truncate pr-2">
+                              <div className="font-mono font-medium text-slate-200 truncate">{item.name}</div>
+                              <div className="text-[11px] text-slate-500">{item.type} • {item.lines.toLocaleString()} lines</div>
+                            </div>
+                            <span className="shrink-0 font-mono text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
+                              {formatSize(item.rawKb)}
+                            </span>
+                          </button>
+                        ))}
                     </div>
                   </div>
 
@@ -1620,22 +1654,22 @@ const res = await call_mcp_tool({
                   </div>
                 </div>
 
-                {/* Right Simulation Execution Console (8 cols) */}
-                <div className="lg:col-span-8 flex flex-col justify-between bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm">
+                {/* Right Simulation Execution Console (7 cols) */}
+                <div className="lg:col-span-7 flex flex-col justify-between bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm">
                   <div className="space-y-4">
                     {/* Simulated Header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
                       <div className="flex items-center gap-2 font-mono text-xs text-slate-300 truncate">
                         <Terminal className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span>Agent Tool Call:</span>
+                        <span>Command:</span>
                         <span className="text-white font-bold bg-slate-800 px-2 py-0.5 rounded truncate max-w-[280px]">
-                          read_file("{currentWorkload.name}")
+                          {currentWorkload.name}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs font-mono text-slate-400">
-                          Filesize: {formatSize(currentWorkload.rawKb)}
+                          Volume: {formatSize(currentWorkload.rawKb)}
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${
@@ -1657,7 +1691,7 @@ const res = await call_mcp_tool({
                           <span>Lifecycle Hook Gate: PreToolUse intercept triggered</span>
                         </div>
                         <p className="text-slate-400 text-[11px]">
-                          File ({formatSize(currentWorkload.rawKb)}) exceeds the configured cutoff of {cutoffKb} KB. Raw dump prevented.
+                          Volume ({formatSize(currentWorkload.rawKb)}) exceeds the configured cutoff of {cutoffKb} KB. Raw dump prevented.
                           Antigravity redirected the query to the local SQLite FTS5 engine.
                         </p>
                       </div>
@@ -1795,13 +1829,13 @@ const res = await call_mcp_tool({
                     Interactive SQLite FTS5 Inspector
                   </h2>
                   <p className="text-sm text-slate-400 mt-1">
-                    Test how the Porter BM25 + Trigram RRF engine scores and retrieves exact code matches from indexed projects.
+                    Test how the Porter BM25 + Trigram RRF engine scores and retrieves exact matches across 350+ rotating logs or monorepo files.
                   </p>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-xs text-slate-400 mr-1">Try searching:</span>
-                  {['SIGSEGV', 'NullPointerException', 'Vulkan', 'RenderTargetBuffer'].map((term) => (
+                  <span className="text-xs text-slate-400 mr-1">Try queries:</span>
+                  {['502 Bad Gateway', 'deprecatedVerifyToken', 'SIGSEGV', 'NullPointerException'].map((term) => (
                     <button
                       key={term}
                       onClick={() => setSearchTerm(term)}
@@ -1829,9 +1863,8 @@ const res = await call_mcp_tool({
                   <div className="flex items-center gap-1.5 self-center sm:self-auto overflow-x-auto pb-1 sm:pb-0">
                     {[
                       { id: 'all', label: 'All Sources' },
-                      { id: 'logs', label: 'Logs' },
-                      { id: 'code', label: 'Source Code' },
-                      { id: 'docs', label: 'Docs' }
+                      { id: 'logs', label: 'Cluster Logs' },
+                      { id: 'code', label: 'Monorepo Code' }
                     ].map((cat) => (
                       <button
                         key={cat.id}
@@ -1856,7 +1889,7 @@ const res = await call_mcp_tool({
 
                   {searchResults.length === 0 ? (
                     <div className="p-8 text-center text-slate-500 bg-black/40 rounded-lg border border-slate-800 font-mono text-xs">
-                      No matches found for "{searchTerm}". Try another keyword like "NullPointerException".
+                      No matches found for "{searchTerm}". Try another keyword like "502 Bad Gateway" or "deprecatedVerifyToken".
                     </div>
                   ) : (
                     searchResults.map((item, idx) => (
@@ -1870,7 +1903,7 @@ const res = await call_mcp_tool({
                               #{idx + 1}
                             </span>
                             <span className="text-white font-semibold truncate">{item.source}</span>
-                            <span className="text-slate-500">Line {item.line}</span>
+                            <span className="text-slate-500">Line {item.line.toLocaleString()}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded text-[11px]">
@@ -1915,7 +1948,6 @@ const res = await call_mcp_tool({
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                {/* Tool list tabs (4 cols) */}
                 <div className="lg:col-span-4 space-y-2">
                   {mcpTools.map((tool, idx) => (
                     <button
@@ -1937,7 +1969,6 @@ const res = await call_mcp_tool({
                   ))}
                 </div>
 
-                {/* Selected tool detail view (8 cols) */}
                 <div className="lg:col-span-8 bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm space-y-6">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-4">
                     <div>
@@ -2014,7 +2045,6 @@ const res = await call_mcp_tool({
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                {/* Step 1: Install & Verify (6 cols) */}
                 <div className="lg:col-span-6 space-y-6">
                   <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm space-y-4">
                     <div className="flex items-center gap-2 font-mono text-sm text-white font-bold">
@@ -2058,7 +2088,6 @@ const res = await call_mcp_tool({
                   </div>
                 </div>
 
-                {/* Step 2: Environment Variables (6 cols) */}
                 <div className="lg:col-span-6 bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm flex flex-col justify-between">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
