@@ -3,11 +3,14 @@
 > **Stop context bloat. Save 90%+ of your prompt tokens. Keep your agent fast, focused, and less forgetful.**
 
 [![npm version](https://img.shields.io/npm/v/antigravity-plugin-context-mode.svg)](https://www.npmjs.com/package/antigravity-plugin-context-mode)
+[![Website](https://img.shields.io/badge/Website-domush.github.io%2Fantigravity--plugin--context--mode-10b981?style=flat&logo=github)](https://domush.github.io/antigravity-plugin-context-mode/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Zero Runtime Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)]()
 [![Antigravity App Compatible](https://img.shields.io/badge/Antigravity%20App-Native%20Plugin-6366f1.svg)]()
 
 **Antigravity Context Mode** is a free, local-first plugin built specifically for the **Google Antigravity App**. It prevents terminal commands, build outputs, multi-megabyte source files, and massive datasets from flooding your conversation history — saving thousands of tokens per turn and stopping "agent amnesia" in its tracks.
+
+> 🌐 **Live Website, Simulator & Changelog:** [domush.github.io/antigravity-plugin-context-mode](https://domush.github.io/antigravity-plugin-context-mode/)
 
 ---
 <img width="817" height="690" alt="Antigravity Context Mode Dashboard" src="https://github.com/user-attachments/assets/dbf6d666-58d0-48f3-bc02-9783acf3fb37" />
