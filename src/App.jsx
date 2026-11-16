@@ -278,6 +278,8 @@ export default function App() {
   // FAQ Accordion State
   const [openFaq, setOpenFaq] = useState(0);
   const [osTab, setOsTab] = useState('windows');
+  const [installTab, setInstallTab] = useState('npx'); // 'npx' | 'git'
+  const [gitOsTab, setGitOsTab] = useState('windows'); // 'windows' | 'unix'
 
   const formatSize = (kb) => {
     if (kb >= 1024) return `${(kb / 1024).toFixed(0)} MB`;
@@ -808,10 +810,10 @@ const res = await call_mcp_tool({
       {/* Top Announcement Banner with Dynamic Live Version */}
       <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-cyan-950/80 border-b border-emerald-500/20 py-2 px-4 text-center text-xs sm:text-sm font-mono text-emerald-300 flex items-center justify-center gap-2">
         <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
-        <span>Latest Release on npm:</span>
+        <span>Install in 1-Click with npx:</span>
         <code className="bg-emerald-500/10 px-2 py-0.5 rounded text-emerald-200 border border-emerald-500/30 flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-          v{latestVersion}
+          npx antigravity-plugin-context-mode install
         </code>
         <button
           onClick={() => navigateTo('changelog')}
@@ -908,7 +910,7 @@ const res = await call_mcp_tool({
             </a>
 
             <button
-              onClick={() => handleCopy(`npm install antigravity-plugin-context-mode@${latestVersion}`)}
+              onClick={() => handleCopy('npx antigravity-plugin-context-mode install')}
               className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
             >
               {copiedCmd ? (
@@ -919,7 +921,7 @@ const res = await call_mcp_tool({
               ) : (
                 <>
                   <Copy className="w-3.5 h-3.5" />
-                  v{latestVersion}
+                  Install CLI
                 </>
               )}
             </button>
@@ -1250,18 +1252,21 @@ const res = await call_mcp_tool({
 
                 <div className="pt-2 max-w-lg mx-auto">
                   <div
-                    onClick={() => handleCopy(`npm i antigravity-plugin-context-mode@${latestVersion}`)}
+                    onClick={() => handleCopy('npx antigravity-plugin-context-mode install')}
                     className="cursor-pointer group bg-black/80 border border-slate-800 hover:border-emerald-500/50 rounded-lg p-2.5 px-4 font-mono text-xs sm:text-sm text-slate-300 flex items-center justify-between transition-colors shadow-inner"
                   >
                     <div className="flex items-center gap-2 truncate">
                       <span className="text-emerald-500 font-bold">$</span>
-                      <span className="text-slate-200">npm i antigravity-plugin-context-mode</span>
+                      <span className="text-slate-200">npx antigravity-plugin-context-mode install</span>
                     </div>
                     <span className="text-slate-500 group-hover:text-emerald-400 flex items-center gap-1 text-xs shrink-0">
                       {copiedCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                       {copiedCmd ? 'Copied' : 'Copy'}
                     </span>
                   </div>
+                  <p className="text-[11px] text-slate-500 mt-1.5 font-mono text-center">
+                    ⚡ 1-click global install into <code className="text-slate-400">~/.gemini/config/plugins/</code>
+                  </p>
                 </div>
               </div>
 
@@ -2031,61 +2036,197 @@ const res = await call_mcp_tool({
           {/* Installation & Configuration Guide */}
           <section id="installation" className="py-16 sm:py-24 border-t border-slate-900 bg-slate-950/90">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-              <div className="text-center max-w-3xl mx-auto mb-16">
+              <div className="text-center max-w-3xl mx-auto mb-12">
                 <div className="inline-flex items-center gap-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-3 py-1 rounded-full text-xs font-mono mb-3">
                   <Terminal className="w-3.5 h-3.5" />
                   Quickstart in 60 Seconds
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                  Installation & Configuration
+                  Installation & Setup
                 </h2>
                 <p className="text-slate-400 text-sm sm:text-base mt-2">
-                  Install via npm into your Antigravity plugins directory or global workspace.
+                  Choose the 1-click automatic CLI installer or clone directly into Antigravity via Git for easy updates.
                 </p>
+
+                {/* Method Switcher Tabs */}
+                <div className="inline-flex bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs font-mono mt-6">
+                  <button
+                    onClick={() => setInstallTab('npx')}
+                    className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${
+                      installTab === 'npx'
+                        ? 'bg-emerald-500 text-slate-950 shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    1-Click npx Installer (Fastest)
+                  </button>
+                  <button
+                    onClick={() => setInstallTab('git')}
+                    className={`px-4 py-2 rounded-lg font-semibold transition-all flex items-center gap-2 ${
+                      installTab === 'git'
+                        ? 'bg-emerald-500 text-slate-950 shadow-md'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <FolderGit2 className="w-3.5 h-3.5" />
+                    Git Clone (Easy git pull Updates)
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Left Column: Install Steps */}
                 <div className="lg:col-span-6 space-y-6">
-                  <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm space-y-4">
-                    <div className="flex items-center gap-2 font-mono text-sm text-white font-bold">
-                      <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">
-                        1
-                      </span>
-                      Install the Plugin
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      Run the standard npm install in your terminal or install from the Antigravity Plugins Manager:
-                    </p>
-                    <div
-                      onClick={() => handleCopy(`npm install antigravity-plugin-context-mode@${latestVersion}`)}
-                      className="cursor-pointer group bg-black/90 border border-slate-800 hover:border-emerald-500/50 rounded-lg p-3.5 font-mono text-xs text-slate-300 flex items-center justify-between"
-                    >
-                      <code>npm install antigravity-plugin-context-mode</code>
-                      <span className="text-slate-500 group-hover:text-emerald-400 flex items-center gap-1 text-xs">
-                        {copiedCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                        {copiedCmd ? 'Copied' : 'Copy'}
-                      </span>
-                    </div>
-                  </div>
+                  {installTab === 'npx' ? (
+                    <>
+                      {/* NPX Option: Global */}
+                      <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-mono text-sm text-white font-bold">
+                            <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">
+                              1
+                            </span>
+                            Global User Install (Recommended)
+                          </div>
+                          <span className="text-xs font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                            All Workspaces
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Automatically detects your OS, unpacks into <code className="text-slate-300">~/.gemini/config/plugins/</code>, and configures lifecycle hooks:
+                        </p>
+                        <div
+                          onClick={() => handleCopy('npx antigravity-plugin-context-mode install')}
+                          className="cursor-pointer group bg-black/90 border border-slate-800 hover:border-emerald-500/50 rounded-lg p-3.5 font-mono text-xs text-slate-300 flex items-center justify-between shadow-inner"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-emerald-500 font-bold">$</span>
+                            <code className="text-slate-200">npx antigravity-plugin-context-mode install</code>
+                          </div>
+                          <span className="text-slate-500 group-hover:text-emerald-400 flex items-center gap-1 text-xs shrink-0">
+                            {copiedCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copiedCmd ? 'Copied' : 'Copy'}
+                          </span>
+                        </div>
+                      </div>
 
-                  <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm space-y-4">
-                    <div className="flex items-center gap-2 font-mono text-sm text-white font-bold">
-                      <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs">
-                        2
-                      </span>
-                      Verify Installation
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      Run the native Node test suite to verify SQLite FTS5 schema initialization & MCP communication:
-                    </p>
-                    <div className="bg-black/90 border border-slate-800 rounded-lg p-3.5 font-mono text-xs text-slate-300 space-y-1">
-                      <div className="text-emerald-400">$ npm test</div>
-                      <div className="text-slate-500">✔ SQLite FTS5 Porter & Trigram tables initialized</div>
-                      <div className="text-slate-500">✔ PreToolUse lifecycle gating verified</div>
-                      <div className="text-slate-500">✔ 8 MCP JSON-RPC tool endpoints verified</div>
-                      <div className="text-emerald-400 font-semibold pt-1"># all test suites passed</div>
-                    </div>
-                  </div>
+                      {/* NPX Option: Workspace only */}
+                      <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-mono text-sm text-white font-bold">
+                            <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs">
+                              2
+                            </span>
+                            Workspace-Only Install (Optional)
+                          </div>
+                          <span className="text-xs font-mono text-slate-400 bg-slate-800 px-2 py-0.5 rounded">
+                            Local Project
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          To install strictly into the current project's <code className="text-slate-300">.gemini/plugins/</code>:
+                        </p>
+                        <div
+                          onClick={() => handleCopy('npx antigravity-plugin-context-mode install --workspace')}
+                          className="cursor-pointer group bg-black/90 border border-slate-800 hover:border-emerald-500/50 rounded-lg p-3.5 font-mono text-xs text-slate-300 flex items-center justify-between shadow-inner"
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-emerald-500 font-bold">$</span>
+                            <code className="text-slate-200">npx antigravity-plugin-context-mode install --workspace</code>
+                          </div>
+                          <span className="text-slate-500 group-hover:text-emerald-400 flex items-center gap-1 text-xs shrink-0">
+                            {copiedCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copiedCmd ? 'Copied' : 'Copy'}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      {/* Git Clone Option */}
+                      <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 font-mono text-sm text-white font-bold">
+                            <span className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xs">
+                              1
+                            </span>
+                            Clone into Plugins Directory
+                          </div>
+
+                          {/* OS Switcher for Git Clone */}
+                          <div className="flex bg-black/60 p-1 rounded-lg border border-slate-800 text-[11px] font-mono">
+                            <button
+                              onClick={() => setGitOsTab('windows')}
+                              className={`px-2.5 py-0.5 rounded transition-colors ${
+                                gitOsTab === 'windows' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              PowerShell
+                            </button>
+                            <button
+                              onClick={() => setGitOsTab('unix')}
+                              className={`px-2.5 py-0.5 rounded transition-colors ${
+                                gitOsTab === 'unix' ? 'bg-emerald-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
+                              }`}
+                            >
+                              macOS / Linux
+                            </button>
+                          </div>
+                        </div>
+
+                        <p className="text-xs text-slate-400">
+                          Clone directly into the Antigravity user plugins discovery folder:
+                        </p>
+
+                        <div
+                          onClick={() =>
+                            handleCopy(
+                              gitOsTab === 'windows'
+                                ? 'git clone https://github.com/Domush/antigravity-plugin-context-mode.git "$env:USERPROFILE\\.gemini\\config\\plugins\\antigravity-plugin-context-mode"'
+                                : 'git clone https://github.com/Domush/antigravity-plugin-context-mode.git ~/.gemini/config/plugins/antigravity-plugin-context-mode'
+                            )
+                          }
+                          className="cursor-pointer group bg-black/90 border border-slate-800 hover:border-emerald-500/50 rounded-lg p-3.5 font-mono text-xs text-slate-300 flex items-center justify-between shadow-inner"
+                        >
+                          <div className="truncate pr-2">
+                            {gitOsTab === 'windows' ? (
+                              <code>git clone https://github.com/Domush/antigravity-plugin-context-mode.git "$env:USERPROFILE\.gemini\config\plugins\antigravity-plugin-context-mode"</code>
+                            ) : (
+                              <code>git clone https://github.com/Domush/antigravity-plugin-context-mode.git ~/.gemini/config/plugins/antigravity-plugin-context-mode</code>
+                            )}
+                          </div>
+                          <span className="text-slate-500 group-hover:text-emerald-400 flex items-center gap-1 text-xs shrink-0">
+                            {copiedCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copiedCmd ? 'Copied' : 'Copy'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Git Pull Updates */}
+                      <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm space-y-4">
+                        <div className="flex items-center gap-2 font-mono text-sm text-white font-bold">
+                          <span className="w-6 h-6 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-xs">
+                            2
+                          </span>
+                          Updating Later with Git
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Whenever a new update drops, pull down the latest commits in one command:
+                        </p>
+                        <div
+                          onClick={() => handleCopy('cd ~/.gemini/config/plugins/antigravity-plugin-context-mode && git pull')}
+                          className="cursor-pointer group bg-black/90 border border-slate-800 hover:border-emerald-500/50 rounded-lg p-3.5 font-mono text-xs text-slate-300 flex items-center justify-between shadow-inner"
+                        >
+                          <code>cd ~/.gemini/config/plugins/antigravity-plugin-context-mode && git pull</code>
+                          <span className="text-slate-500 group-hover:text-emerald-400 flex items-center gap-1 text-xs shrink-0">
+                            {copiedCmd ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                            {copiedCmd ? 'Copied' : 'Copy'}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 <div className="lg:col-span-6 bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm flex flex-col justify-between">
