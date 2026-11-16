@@ -837,57 +837,53 @@ const res = await call_mcp_tool({
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
             </div>
-            <div>
+            <div className="flex-shrink-0">
               <div className="flex items-center gap-2">
-                <span className="font-bold tracking-tight text-white text-base sm:text-lg">
+                <span className="font-bold tracking-tight text-white text-base sm:text-lg whitespace-nowrap">
                   Context Mode
                 </span>
-                <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2.5 py-0.5 rounded-full text-xs font-mono flex items-center gap-1">
+                <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-full text-xs font-mono flex items-center gap-1 whitespace-nowrap flex-shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
                   v{latestVersion}
-                  {isLiveVersion && <span className="text-[10px] text-emerald-400 font-semibold">• Live</span>}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 hidden sm:block">For Google Antigravity AI Agent</p>
+              <p className="text-xs text-slate-400 hidden sm:block whitespace-nowrap">For Google Antigravity App</p>
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
+          <nav className="hidden md:flex items-center gap-4 lg:gap-6 text-sm font-medium text-slate-300">
             <button
               onClick={() => navigateTo('home', 'how-it-works')}
-              className={`hover:text-emerald-400 transition-colors ${currentPage === 'home' ? 'text-slate-200' : 'text-slate-400'}`}
+              className={`hover:text-emerald-400 transition-colors whitespace-nowrap ${currentPage === 'home' ? 'text-slate-200' : 'text-slate-400'}`}
             >
               How It Works
             </button>
             <button
               onClick={() => navigateTo('home', 'simulator')}
-              className="hover:text-emerald-400 transition-colors"
+              className="hover:text-emerald-400 transition-colors whitespace-nowrap"
             >
               Simulator & Scenarios
             </button>
             <button
               onClick={() => navigateTo('home', 'dashboard-screenshot')}
-              className="hover:text-emerald-400 transition-colors"
+              className="hover:text-emerald-400 transition-colors whitespace-nowrap"
             >
               Sidecar UI
             </button>
             <button
               onClick={() => navigateTo('home', 'mcp-tools')}
-              className="hover:text-emerald-400 transition-colors"
+              className="hover:text-emerald-400 transition-colors whitespace-nowrap"
             >
               8 MCP Tools
             </button>
             <button
               onClick={() => navigateTo('changelog')}
-              className={`flex items-center gap-1.5 transition-colors ${
+              className={`flex items-center gap-1.5 transition-colors whitespace-nowrap ${
                 currentPage === 'changelog' ? 'text-emerald-400 font-bold' : 'hover:text-emerald-400'
               }`}
             >
               <BookOpen className="w-3.5 h-3.5 text-emerald-400" />
               <span>Changelog</span>
-              <span className="bg-emerald-500/20 text-emerald-300 text-[10px] font-mono px-1.5 py-0.2 rounded border border-emerald-500/30">
-                New
-              </span>
             </button>
           </nav>
 
