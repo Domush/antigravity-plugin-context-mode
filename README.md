@@ -83,28 +83,38 @@ Tested live on real-world build logs, source files, and datasets in the Antigrav
 
 ## Quick Start & Installation
 
-### Option 1: Global User Install (Recommended)
-Installs Context Mode for all your projects and conversations:
+### Method 1: 1-Click CLI Installer (Fastest)
+Run this command from any terminal:
 
 ```bash
-# Clone directly into your Antigravity user plugins directory
+npx antigravity-plugin-context-mode install
+```
+
+This automatically detects your operating system, unpacks the latest release into `~/.gemini/config/plugins/antigravity-plugin-context-mode`, and activates hooks and MCP tools. Restart the Antigravity App to activate!
+
+> **Workspace-only install:** To install only for the current project, add `--workspace`:
+> ```bash
+> npx antigravity-plugin-context-mode install --workspace
+> ```
+
+---
+
+### Method 2: Git Clone (Ideal for Easy Updates)
+If you prefer managing the plugin via Git for easy `git pull` updates:
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/Domush/antigravity-plugin-context-mode.git "$env:USERPROFILE\.gemini\config\plugins\antigravity-plugin-context-mode"
+```
+
+**macOS / Linux:**
+```bash
 git clone https://github.com/Domush/antigravity-plugin-context-mode.git ~/.gemini/config/plugins/antigravity-plugin-context-mode
 ```
 
-Restart the Antigravity App once. The plugin, hooks, and MCP tools will be active globally!
-
-### Option 2: Project-Scoped Workspace Install
-If you only want Context Mode active in a specific project:
-
+**To update later:**
 ```bash
-# From your project root directory:
-mkdir -p .agents/plugins
-git clone https://github.com/Domush/antigravity-plugin-context-mode.git .agents/plugins/antigravity-plugin-context-mode
-```
-
-### Option 3: Via npm
-```bash
-npm install -g antigravity-plugin-context-mode
+cd ~/.gemini/config/plugins/antigravity-plugin-context-mode && git pull
 ```
 
 ---

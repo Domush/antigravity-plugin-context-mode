@@ -13,6 +13,103 @@ try {
   if (pkg.version) pkgVersion = pkg.version;
 } catch {}
 
+// Handle CLI subcommands (e.g. npx antigravity-plugin-context-mode install)
+const cliArg = process.argv[2];
+if (
+  cliArg === "install" ||
+  cliArg === "uninstall" ||
+  cliArg === "--help" ||
+  cliArg === "-h" ||
+  cliArg === "--version" ||
+  cliArg === "-v"
+) {
+  if (cliArg === "--version" || cliArg === "-v") {
+    console.log(`antigravity-plugin-context-mode v${pkgVersion}`);
+    process.exit(0);
+  }
+
+  if (cliArg === "--help" || cliArg === "-h") {
+    console.log(`
+Antigravity Context Mode CLI (v${pkgVersion})
+
+Usage:
+  npx antigravity-plugin-context-mode install [options]     Install plugin into Google Antigravity
+  npx antigravity-plugin-context-mode uninstall [options]   Remove installed plugin
+  npx antigravity-plugin-context-mode                      Start MCP stdio JSON-RPC server
+
+Options:
+  --global, -g     Install globally in ~/.gemini/config/plugins/ (default)
+  --workspace, -w  Install in current workspace (.gemini/plugins/antigravity-plugin-context-mode)
+`);
+    process.exit(0);
+  }
+
+  const isWorkspace = process.argv.includes("--workspace") || process.argv.includes("-w");
+  const homeDir = process.env.USERPROFILE || process.env.HOME || "";
+
+  let targetDir = "";
+  if (isWorkspace) {
+    targetDir = path.join(process.cwd(), ".gemini", "plugins", "antigravity-plugin-context-mode");
+  } else {
+    targetDir = path.join(homeDir, ".gemini", "config", "plugins", "antigravity-plugin-context-mode");
+  }
+
+  if (cliArg === "uninstall") {
+    if (fs.existsSync(targetDir)) {
+      fs.rmSync(targetDir, { recursive: true, force: true });
+      console.log(`\n✔ Antigravity Context Mode successfully removed from:`);
+      console.log(`  ${targetDir}\n`);
+    } else {
+      console.log(`\nℹ Plugin not found at: ${targetDir}\n`);
+    }
+    process.exit(0);
+  }
+
+  if (cliArg === "install") {
+    console.log(`\n📦 Installing Antigravity Context Mode v${pkgVersion}...`);
+    try {
+      fs.mkdirSync(targetDir, { recursive: true });
+
+      const filesToCopy = [
+        "plugin.json",
+        "hooks.json",
+        "mcp_config.json",
+        "server.js",
+        "package.json",
+        "README.md",
+        "LICENSE",
+        "CHANGELOG.md"
+      ];
+
+      const dirsToCopy = ["lib", "hooks", "skills", "rules", "assets"];
+
+      for (const file of filesToCopy) {
+        const src = path.join(__dirname, file);
+        const dest = path.join(targetDir, file);
+        if (fs.existsSync(src)) {
+          fs.copyFileSync(src, dest);
+        }
+      }
+
+      for (const dir of dirsToCopy) {
+        const srcDir = path.join(__dirname, dir);
+        const destDir = path.join(targetDir, dir);
+        if (fs.existsSync(srcDir)) {
+          fs.cpSync(srcDir, destDir, { recursive: true });
+        }
+      }
+
+      console.log(`\n✨ Installation complete!`);
+      console.log(`📍 Location: ${targetDir}`);
+      console.log(`🚀 Restart or open the Google Antigravity App to activate Context Mode.\n`);
+    } catch (err) {
+      console.error(`\n❌ Installation failed: ${err.message}\n`);
+      process.exit(1);
+    }
+    process.exit(0);
+  }
+}
+
 const store = new ContextModeStore();
 let currentCwd = process.cwd();
 let currentSessionId =
