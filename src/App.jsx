@@ -889,12 +889,6 @@ const res = await call_mcp_tool({
                 New
               </span>
             </button>
-            <button
-              onClick={() => navigateTo('home', 'installation')}
-              className="hover:text-emerald-400 transition-colors"
-            >
-              Install
-            </button>
           </nav>
 
           <div className="hidden sm:flex items-center gap-3">
@@ -908,23 +902,6 @@ const res = await call_mcp_tool({
               <Code2 className="w-3.5 h-3.5 text-slate-400" />
               GitHub
             </a>
-
-            <button
-              onClick={() => handleCopy('npx antigravity-plugin-context-mode install')}
-              className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm transition-all"
-            >
-              {copiedCmd ? (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  Copied!
-                </>
-              ) : (
-                <>
-                  <Copy className="w-3.5 h-3.5" />
-                  Install CLI
-                </>
-              )}
-            </button>
           </div>
 
           <button
