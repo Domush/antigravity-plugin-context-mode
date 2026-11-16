@@ -2,6 +2,13 @@
 
 All notable changes to `antigravity-plugin-context-mode` will be documented in this file.
 
+## [1.3.1] - 2026-11-16
+
+### Added
+- **1-Click CLI Installer (`npx antigravity-plugin-context-mode install`)**: Added automated CLI installation handler to `server.js`. Running `npx antigravity-plugin-context-mode install` automatically detects the user's OS and copies plugin manifests, hooks, skills, and MCP tools directly into `~/.gemini/config/plugins/antigravity-plugin-context-mode` (or workspace-scoped via `--workspace`).
+- **CLI Uninstaller (`npx antigravity-plugin-context-mode uninstall`)**: Easily remove the installed plugin from the Antigravity discovery directory with clean terminal confirmation.
+- **CLI Flags (`--help`, `-h`, `--version`, `-v`)**: Quick terminal reference for command options while maintaining 100% backward compatibility with MCP stdio JSON-RPC protocol execution.
+
 ## [1.3.0] - 2026-11-15
 
 ### Added
