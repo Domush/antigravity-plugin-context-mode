@@ -37,6 +37,15 @@ if (!appStartTime) {
   appStartTime = Date.now() - Math.round(process.uptime() * 1000);
 }
 
+// Clear session-level overrides on app session restart
+try {
+  const recordedSessionTime = store.getMeta("app_session_start_time");
+  if (!recordedSessionTime || recordedSessionTime !== String(appStartTime)) {
+    store.clearSessionOverrides();
+    store.setMeta("app_session_start_time", String(appStartTime));
+  }
+} catch {}
+
 function resolveTargetSession(data, defaultConvId = "default") {
   const scope = data.scope || (data.sessionId === "all" ? "lifetime" : (data.sessionId === "app" ? "app" : "conversation"));
   const convId = data.conversationId || (data.sessionId !== "all" && data.sessionId !== "app" && data.sessionId ? data.sessionId : (defaultConvId || "default"));
@@ -63,6 +72,8 @@ function getStatsPayload(data, defaultConvId = "default") {
   stats.conversationCutoffBytes = store.getCutoff(convId);
   stats.appCutoffBytes = store.getCutoff("app");
   stats.globalCutoffBytes = store.getCutoff(null);
+  stats.hasConversationCutoffOverride = store.hasCutoffOverride(convId);
+  stats.hasAppCutoffOverride = store.hasCutoffOverride("app");
   stats.cutoffBytes = scope === "lifetime"
     ? stats.globalCutoffBytes
     : (scope === "app" ? stats.appCutoffBytes : stats.conversationCutoffBytes);
@@ -136,10 +147,18 @@ if (isSidecarEnv) {
   }, "GET");
 
   const handleCutoff = (data) => {
-    const { scope, targetSid } = resolveTargetSession(data, app.config.conversationId);
+    const { scope, targetSid, convId } = resolveTargetSession(data, app.config.conversationId);
     const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
     const saved = store.setCutoff(cutoffBytes, targetSid);
-    return { ok: true, cutoffBytes: saved, scope, sessionId: targetSid };
+    return {
+      ok: true,
+      cutoffBytes: saved,
+      scope,
+      sessionId: targetSid,
+      globalCutoffBytes: store.getCutoff(null),
+      appCutoffBytes: store.getCutoff("app"),
+      conversationCutoffBytes: store.getCutoff(convId)
+    };
   };
   app.api("/api/cutoff", handleCutoff, "GET");
   app.api("/api/cutoff", handleCutoff, "POST");
@@ -253,11 +272,21 @@ if (isSidecarEnv) {
 
     if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/cutoff") {
       const handleCutoffReq = (data) => {
-        const { scope, targetSid } = resolveTargetSession(data);
+        const { scope, targetSid, convId } = resolveTargetSession(data);
         const cutoffBytes = data.cutoff === "none" || data.cutoff === 0 || data.cutoff === "0" ? 0 : parseInt(data.cutoff, 10);
         const saved = store.setCutoff(cutoffBytes, targetSid);
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(JSON.stringify({ ok: true, cutoffBytes: saved, scope, sessionId: targetSid }));
+        res.end(
+          JSON.stringify({
+            ok: true,
+            cutoffBytes: saved,
+            scope,
+            sessionId: targetSid,
+            globalCutoffBytes: store.getCutoff(null),
+            appCutoffBytes: store.getCutoff("app"),
+            conversationCutoffBytes: store.getCutoff(convId)
+          })
+        );
       };
       if (req.method === "GET") {
         const data = Object.fromEntries(url.searchParams.entries());

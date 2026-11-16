@@ -59,10 +59,10 @@ When an AI coding agent runs tools, standard workflows dump everything directly 
                                           relevant answer to the chat!
 ```
 
-1. **Smart Lifecycle Gating (`hooks.json`)**: Before a command or file read executes, Context Mode checks if it will cause a context flood. If it exceeds 8 KB or attempts an unbounded file dump, the hook intercepts it and guides the agent to query or sandbox the data instead.
+1. **Smart Lifecycle Gating (`hooks.json`)**: Before a command or file read executes, Context Mode checks if it will cause a context flood. Applied identically to primary agents and subagents, the hook intercepts un-paged reads exceeding the active cutoff (default 8 KB) and unbounded dumps, guiding agents to query or sandbox the data instead.
 2. **"Thinking in Code" (`ctx_execute`)**: Instead of reading a 5,000-line log into memory, the agent executes a concise local script (Node.js, Python, or PowerShell). The script filters the data in **50 ms** and returns *only* the specific answer or error to the conversation.
-3. **Local SQLite FTS5 Storage (`ctx_search`, `ctx_index`)**: Raw outputs are saved safely on your local disk in `~/.context-mode/context.db`. The agent uses reciprocal rank fusion search to fetch only the exact snippets it needs.
-4. **Live Sidecar Dashboard**: A native side pane right inside the Antigravity App that displays real-time context savings, lets you toggle file categories on the fly, and search indexed data with a click.
+3. **Local SQLite FTS5 Storage (`ctx_search`, `ctx_index`)**: Raw outputs and indexed files are saved safely on your local disk in `~/.context-mode/context.db`. The agent uses reciprocal rank fusion search to fetch only the exact snippets it needs.
+4. **Live Sidecar Dashboard**: A native side pane right inside the Antigravity App that displays real-time context savings across primary agents and subagents, lets you toggle file categories on the fly, and search indexed data with a click.
 
 ---
 
@@ -115,9 +115,10 @@ Context Mode includes a native web dashboard that opens directly in Antigravity'
 * **Dynamic Version Badge:** Automatically reflects the active plugin version in the top-right header.
 * **Context Saved Progress Bar:** Visual indicator displaying the exact percentage of context window preserved.
 * **3-Way Scope Toggle:** Seamlessly inspect telemetry at three distinct levels:
-  * **Conversation**: Metrics strictly for the active chat; clean slate on new conversations.
-  * **Session**: Metrics aggregated across all conversations since the app restarted.
-  * **Lifetime**: All-time cumulative database metrics and persistent totals.
+  * **Conversation**: Metrics strictly for the active chat; clean slate on new conversations. Subagent actions within the conversation feed directly into this view.
+  * **Session**: Metrics aggregated across all conversations since the app restarted. Automatically resets transient overrides on app reboot.
+  * **Lifetime**: All-time cumulative database metrics and persistent totals. Changing the cutoff in Lifetime updates the baseline defaults for all new sessions and new conversations.
+* **Shared Subagent Feed:** Interceptions triggered by subagents (`researcher`, `browser`, etc.) are badged by role and displayed alongside primary agent events in the same conversation feed.
 * **File Category Toggles:** Clean, one-click pills for grouping exemptions without reading massive lists:
   * **Images** (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.ico`, `.tiff`, `.psd`) — *Enabled by default*
   * **Documents** (`.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.odt`, `.rtf`) — *Enabled by default*
@@ -194,7 +195,10 @@ Verifies:
 * SQLite FTS5 schema initialization, chunking, Porter BM25, and Trigram search.
 * Reciprocal Rank Fusion (RRF) ranking.
 * Sandbox execution and process timeout termination.
-* `PreToolUse` and `SessionStart` lifecycle hook gating.
+* `PreToolUse` and `SessionStart` lifecycle hook gating for primary agents and subagents.
+* Shared conversation dashboard linking and subagent interception event journal.
+* Lifetime cutoff inheritance across new sessions and new conversations.
+* Mathematically accurate context savings calculations without double-counting.
 * File category toggles and custom extension management.
 * Active / Paused state toggle and bypass logic.
 * MCP stdio JSON-RPC protocol compliance.

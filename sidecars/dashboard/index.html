@@ -552,17 +552,31 @@
         if (cachedStats) {
           if (currentScope === 'lifetime') {
             cachedStats.globalCutoffBytes = cutoffBytes;
+            cachedStats.appCutoffBytes = cutoffBytes;
+            if (!cachedStats.hasConversationCutoffOverride) {
+              cachedStats.conversationCutoffBytes = cutoffBytes;
+              cachedStats.cutoffBytes = cutoffBytes;
+            }
           } else if (currentScope === 'app') {
             cachedStats.appCutoffBytes = cutoffBytes;
+            cachedStats.hasAppCutoffOverride = true;
           } else {
             cachedStats.conversationCutoffBytes = cutoffBytes;
             cachedStats.cutoffBytes = cutoffBytes;
+            cachedStats.hasConversationCutoffOverride = true;
           }
         }
 
         const queryUrl = `/api/cutoff?cutoff=${encodeURIComponent(cutoffBytes)}&scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
         const res = await apiFetch(queryUrl, { method: 'GET' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const respData = await res.json().catch(() => null);
+        if (respData && cachedStats) {
+          if (respData.globalCutoffBytes !== undefined) cachedStats.globalCutoffBytes = respData.globalCutoffBytes;
+          if (respData.appCutoffBytes !== undefined) cachedStats.appCutoffBytes = respData.appCutoffBytes;
+          if (respData.conversationCutoffBytes !== undefined) cachedStats.conversationCutoffBytes = respData.conversationCutoffBytes;
+        }
+        refreshData(true);
       } catch (err) {
         console.error("Failed to update cutoff:", err);
       }
@@ -859,11 +873,15 @@
             const interceptions = r.recentEvents.filter(ev => ev.kind === 'interception');
             for (const ev of interceptions) {
               const displayPath = formatItemPath(ev.path || ev.tool);
+              const agentBadge = (ev.agent && ev.agent !== 'antigravity' && ev.agent !== 'primary')
+                ? `<span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30 font-semibold flex-shrink-0" title="Triggered by subagent: ${ev.agent}">${ev.agent}</span>`
+                : '';
               items.push(`
                 <div class="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 flex justify-between items-center gap-3 transition" 
-                     title="Intercepted by Context Mode to reduce context size: ${ev.path || ev.tool}">
+                     title="Intercepted by Context Mode to reduce context size: ${ev.path || ev.tool}${ev.agent ? ' (Agent: ' + ev.agent + ')' : ''}">
                   <div class="flex items-center gap-2 min-w-0 flex-1">
                     <span class="w-1.5 h-1.5 rounded-full bg-rose-400 flex-shrink-0"></span>
+                    ${agentBadge}
                     <span class="truncate text-xs font-mono">
                       <span class="font-bold text-rose-300">Blocked ${ev.tool}:</span> 
                       <span class="text-slate-200">${displayPath}</span>

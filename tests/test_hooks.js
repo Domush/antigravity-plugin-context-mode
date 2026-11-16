@@ -436,13 +436,86 @@ test("PreToolUse hook - allows all tool calls through without interception when 
   }
 });
 
-test("SessionStart hook - injects status system message", async () => {
+test("SessionStart hook - injects status system message and resets session overrides", async () => {
   const hookFile = path.resolve("hooks/session-start.js");
-  const result = await runHook(hookFile, {
-    conversationId: "test-conv-123"
-  });
+  const { ContextModeStore } = await import("../lib/store.js");
+  const store = new ContextModeStore();
 
-  assert.ok(result.injectSteps);
-  assert.equal(result.injectSteps.length, 1);
-  assert.ok(result.injectSteps[0].systemMessage.systemMessage.includes("context-mode active"));
+  try {
+    store.setCutoff(4096, "all");
+    store.setCutoff(16384, "app");
+    assert.equal(store.getCutoff("app"), 16384);
+
+    const result = await runHook(hookFile, {
+      conversationId: "test-conv-123"
+    });
+
+    assert.ok(result.injectSteps);
+    assert.equal(result.injectSteps.length, 1);
+    assert.ok(result.injectSteps[0].systemMessage.systemMessage.includes("context-mode active"));
+
+    // Session override was cleared, so session cutoff defaults back to lifetime cutoff (4096)
+    assert.equal(store.getCutoff("app"), 4096);
+    assert.equal(store.getCutoff("test-conv-new"), 4096);
+  } finally {
+    store.close();
+  }
+});
+
+test("PreToolUse hook - applies to subagents and primary agents alike and shares the same conversation dashboard", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const tmpFile = path.join(os.tmpdir(), "subagent_large_file.txt");
+  fs.writeFileSync(tmpFile, "Z".repeat(35000)); // 35 KB
+
+  const primaryConvId = `conv-shared-${Date.now()}`;
+  const subagentConvId = `subagent-${Date.now()}`;
+  const { ContextModeStore } = await import("../lib/store.js");
+  const store = new ContextModeStore();
+
+  try {
+    // 1. Primary agent sets cutoff for this conversation to 8 KB
+    store.setCutoff(8192, primaryConvId);
+
+    // 2. Primary agent calls read_file on 35 KB file -> denied and intercepted
+    const resPrimary = await runHook(hookFile, {
+      conversationId: primaryConvId,
+      agent: "antigravity",
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpFile }
+      }
+    });
+    assert.equal(resPrimary.decision, "deny");
+    assert.ok(resPrimary.reason.includes("context-mode protection"));
+
+    // 3. Subagent calls read_file on 35 KB file with parentConversationId pointing to primaryConvId
+    const resSubagent = await runHook(hookFile, {
+      conversationId: subagentConvId,
+      parentConversationId: primaryConvId,
+      agent: "researcher",
+      subagent: true,
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpFile }
+      }
+    });
+    assert.equal(resSubagent.decision, "deny");
+    assert.ok(resSubagent.reason.includes("context-mode protection"));
+
+    // 4. Verify both interceptions are recorded under the shared conversation ID
+    const stats = store.getStats(primaryConvId);
+    assert.equal(stats.calls, 2);
+    assert.equal(stats.totalRawBytes, 70000); // 35k + 35k
+    assert.equal(stats.keptOutBytes, 70000);
+    assert.equal(stats.savingsPercent, 100);
+
+    // 5. Verify the resume state includes the subagent's role
+    const resume = store.getResumeState(primaryConvId, 10);
+    const subagentEvent = resume.recentEvents.find(e => e.agent === "researcher");
+    assert.ok(subagentEvent);
+    assert.equal(subagentEvent.sandbox_bytes, 35000);
+  } finally {
+    store.close();
+    if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+  }
 });

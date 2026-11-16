@@ -185,13 +185,42 @@ function isBinaryFile(absPath, ext) {
   return false;
 }
 
-function recordInterception({ sessionId, cwd, toolName, path: targetPath, size, reason }) {
+export function resolveSharedSessionId(payload = {}) {
+  return (
+    payload.rootConversationId ||
+    payload.root_conversation_id ||
+    payload.parentConversationId ||
+    payload.parent_conversation_id ||
+    process.env.ANTIGRAVITY_ROOT_CONVERSATION_ID ||
+    process.env.ANTIGRAVITY_PARENT_CONVERSATION_ID ||
+    process.env.ANTIGRAVITY_CONVERSATION_ID ||
+    payload.conversationId ||
+    payload.conversation_id ||
+    payload.sessionId ||
+    payload.session_id ||
+    "default"
+  );
+}
+
+export function resolveAgentName(payload = {}) {
+  return (
+    payload.agent ||
+    payload.agentName ||
+    payload.agent_name ||
+    payload.agentType ||
+    payload.agent_type ||
+    payload.role ||
+    (payload.subagent ? "subagent" : "antigravity")
+  );
+}
+
+function recordInterception({ sessionId, agent, cwd, toolName, path: targetPath, size, reason }) {
   try {
     const store = new ContextModeStore();
     store.recordEvent({
       sessionId: sessionId || "default",
       worktree: cwd || process.cwd(),
-      agent: "antigravity",
+      agent: agent || "antigravity",
       kind: "interception",
       tool: toolName,
       key: "blocked",
@@ -379,12 +408,8 @@ async function main() {
   const toolName = toolCall.name || "";
   const args = toolCall.args || {};
   const cwd = payload.cwd || process.cwd();
-  const sessionId =
-    payload.sessionId ||
-    payload.session_id ||
-    payload.conversationId ||
-    process.env.ANTIGRAVITY_CONVERSATION_ID ||
-    null;
+  const sessionId = resolveSharedSessionId(payload);
+  const agentName = resolveAgentName(payload);
 
   // If Context Mode protection is paused, allow all tool calls through without interception
   if (isProtectionPaused(sessionId)) {
@@ -431,6 +456,7 @@ async function main() {
             // Record interception event in SQLite store so dashboard telemetry updates immediately
             recordInterception({
               sessionId,
+              agent: agentName,
               cwd,
               toolName,
               path: filePath,
@@ -465,6 +491,7 @@ async function main() {
     if (inspection.shouldDeny) {
       recordInterception({
         sessionId,
+        agent: agentName,
         cwd,
         toolName,
         path: inspection.targetPath || cleanStringArg(rawCommandLine),

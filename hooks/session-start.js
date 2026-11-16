@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { ContextModeStore } from "../lib/store.js";
 
 function readStdin() {
   return new Promise((resolve) => {
@@ -15,6 +16,12 @@ function readStdin() {
 
 async function main() {
   await readStdin();
+
+  try {
+    const store = new ContextModeStore();
+    store.clearSessionOverrides();
+    store.close();
+  } catch {}
 
   const response = {
     injectSteps: [

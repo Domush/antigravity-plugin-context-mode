@@ -24,6 +24,8 @@ const tools = createTools({
   store,
   getCwd: () => currentCwd,
   getSessionId: () =>
+    process.env.ANTIGRAVITY_ROOT_CONVERSATION_ID ||
+    process.env.ANTIGRAVITY_PARENT_CONVERSATION_ID ||
     process.env.ANTIGRAVITY_CONVERSATION_ID ||
     process.env.CONVERSATION_ID ||
     currentSessionId ||
