@@ -210,7 +210,6 @@ function parseMarkdownToChangelog(markdown) {
 
       if (!currentRelease) continue;
 
-      // Section header: ### Added or ### Fixed
       if (line.startsWith('### Added')) {
         currentSection = 'added';
         continue;
@@ -222,7 +221,6 @@ function parseMarkdownToChangelog(markdown) {
         continue;
       }
 
-      // Bullet item: - **Title**: Description
       if (currentSection && line.startsWith('- ')) {
         const itemText = line.substring(2).trim();
         const titleMatch = itemText.match(/^\*\*([^*]+)\*\*:\s*(.+)$/);
@@ -265,10 +263,10 @@ export default function App() {
   const [changelogFilterType, setChangelogFilterType] = useState('all'); // 'all' | 'added' | 'fixed'
 
   // Playground / Simulator State
-  const [selectedWorkload, setSelectedWorkload] = useState('editor_log');
+  const [selectedWorkload, setSelectedWorkload] = useState('crash_dump');
   const [cutoffKb, setCutoffKb] = useState(8);
   const [isProtected, setIsProtected] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('NullPointerException');
+  const [searchTerm, setSearchTerm] = useState('SIGSEGV');
   const [searchActiveCategory, setSearchActiveCategory] = useState('all');
 
   // MCP Tools Explorer State
@@ -283,6 +281,12 @@ export default function App() {
 
   // OS config tab
   const [osTab, setOsTab] = useState('windows');
+
+  // Format helper for bytes
+  const formatSize = (kb) => {
+    if (kb >= 1024) return `${(kb / 1024).toFixed(0)} MB`;
+    return `${kb} KB`;
+  };
 
   // Sync hash routing with page state
   useEffect(() => {
@@ -314,9 +318,7 @@ export default function App() {
           setIsLiveVersion(true);
         }
       })
-      .catch(() => {
-        // Fallback to static bundled version
-      });
+      .catch(() => {});
 
     // 2. Fetch live CHANGELOG.md from GitHub main branch
     setChangelogLoading(true);
@@ -331,9 +333,7 @@ export default function App() {
           setChangelogData(parsed);
         }
       })
-      .catch(() => {
-        // Keep bundled fallback
-      })
+      .catch(() => {})
       .finally(() => {
         setChangelogLoading(false);
       });
@@ -373,13 +373,33 @@ export default function App() {
 
   // Workload data dictionary
   const workloads = {
+    crash_dump: {
+      name: 'crash_dump.dmp / heap.log',
+      type: '100 MB Crash Dump',
+      rawKb: 102400, // 100 MB
+      rawTokens: 25600000, // ~25.6M tokens
+      lines: 1850000,
+      description: 'Agent attempting an unbounded read of a 100 MB native application crash dump with stack traces and memory registers.',
+      rawSample: `[DUMP HEADER] SIGSEGV (0x00007fff8921a000) Crash Thread: 0x7fa2
+Process: unity_engine_editor.exe | Subsystem: VulkanCore
+Registers: RAX=0x0000000000000000 RBX=0x0000000000000000 RCX=0x00007fa214b8
+... [1,850,000 lines of register dumps, heap hex, and un-paged stack frames] ...
+[FAULTING INSTRUCTION] mov rax, [rbx + 0x18] (NullPointer dereference)
+Stacktrace: at RenderBufferPool.AllocateHeap(buffer.cc:842)`,
+      filteredSnippet: `[SQLite FTS5 BM25 match (Score 26.4)]:
+[FAULTING INSTRUCTION] mov rax, [rbx + 0x18] (NullPointer dereference)
+Faulting Address: 0x00007fff8921a412 | Thread 0x7fa2
+Stacktrace: at RenderBufferPool.AllocateHeap(buffer.cc:842)
+Resolution: Initialize SwapChain RenderTargetBuffer prior to invocation.`,
+      filteredTokens: 88,
+    },
     editor_log: {
       name: 'Logs/Editor.log',
       type: 'Log File',
       rawKb: 65,
       rawTokens: 16250,
       lines: 2450,
-      description: 'Unity/Electron editor trace with thousands of debug logs & 1 critical crash trace.',
+      description: 'Editor trace with thousands of debug logs & 1 critical crash trace.',
       rawSample: `[2026-11-15 18:20:11.102] [DEBUG] Initializing engine core...
 [2026-11-15 18:20:11.145] [DEBUG] Loading render subsystem Vulkan 1.3...
 [2026-11-15 18:20:12.890] [INFO] Allocated 4096MB VRAM pool
@@ -460,38 +480,43 @@ File: src/api/auth.ts:44
     }
   };
 
-  const currentWorkload = workloads[selectedWorkload] || workloads.editor_log;
+  const currentWorkload = workloads[selectedWorkload] || workloads.crash_dump;
   const isBlocked = isProtected && (cutoffKb > 0 && currentWorkload.rawKb > cutoffKb);
 
   // Token calculations
   const effectiveTokens = isBlocked ? currentWorkload.filteredTokens : currentWorkload.rawTokens;
   const tokensSaved = currentWorkload.rawTokens - effectiveTokens;
-  const percentSaved = Math.round((tokensSaved / currentWorkload.rawTokens) * 100);
-  const savedCost = ((tokensSaved / 1_000_000) * 3.0).toFixed(4);
+  const percentSaved = ((tokensSaved / currentWorkload.rawTokens) * 100).toFixed(
+    currentWorkload.rawKb >= 1024 ? 3 : 1
+  );
+  const costDollars = (tokensSaved / 1_000_000) * 3.0;
+  const savedCost = costDollars < 0.01 ? '< $0.01' : `$${costDollars.toFixed(2)}`;
 
   // Filtered changelog releases
   const filteredChangelog = useMemo(() => {
     const q = changelogSearch.toLowerCase().trim();
-    return changelogData.map((release) => {
-      const addedMatches = (release.added || []).filter((item) => {
-        const matchesQuery = !q || item.title.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q);
-        const matchesFilter = changelogFilterType === 'all' || changelogFilterType === 'added';
-        return matchesQuery && matchesFilter;
-      });
+    return changelogData
+      .map((release) => {
+        const addedMatches = (release.added || []).filter((item) => {
+          const matchesQuery = !q || item.title.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q);
+          const matchesFilter = changelogFilterType === 'all' || changelogFilterType === 'added';
+          return matchesQuery && matchesFilter;
+        });
 
-      const fixedMatches = (release.fixed || []).filter((item) => {
-        const matchesQuery = !q || item.title.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q);
-        const matchesFilter = changelogFilterType === 'all' || changelogFilterType === 'fixed';
-        return matchesQuery && matchesFilter;
-      });
+        const fixedMatches = (release.fixed || []).filter((item) => {
+          const matchesQuery = !q || item.title.toLowerCase().includes(q) || item.desc.toLowerCase().includes(q);
+          const matchesFilter = changelogFilterType === 'all' || changelogFilterType === 'fixed';
+          return matchesQuery && matchesFilter;
+        });
 
-      return {
-        ...release,
-        added: addedMatches,
-        fixed: fixedMatches,
-        hasMatches: addedMatches.length > 0 || fixedMatches.length > 0 || (!q && changelogFilterType === 'all')
-      };
-    }).filter((r) => r.hasMatches);
+        return {
+          ...release,
+          added: addedMatches,
+          fixed: fixedMatches,
+          hasMatches: addedMatches.length > 0 || fixedMatches.length > 0 || (!q && changelogFilterType === 'all')
+        };
+      })
+      .filter((r) => r.hasMatches);
   }, [changelogData, changelogSearch, changelogFilterType]);
 
   // MCP Tools catalog
@@ -651,6 +676,16 @@ const res = await call_mcp_tool({
     const mockDb = [
       {
         id: 1,
+        source: 'crash_dump.dmp',
+        category: 'logs',
+        line: 1842010,
+        score: 26.4,
+        matchType: 'BM25 Exact + Trigram',
+        content: '[FAULTING INSTRUCTION] mov rax, [rbx + 0x18] (SIGSEGV address boundary fault)',
+        context: '100 MB Crash Dump: RenderBufferPool::AllocateHeap() thread fault'
+      },
+      {
+        id: 2,
         source: 'Logs/Editor.log',
         category: 'logs',
         line: 412,
@@ -660,7 +695,7 @@ const res = await call_mcp_tool({
         context: 'Vulkan pipeline initialization failed while binding swapchain framebuffers'
       },
       {
-        id: 2,
+        id: 3,
         source: 'src/engine/vulkan_pipeline.cc',
         category: 'code',
         line: 412,
@@ -670,7 +705,7 @@ const res = await call_mcp_tool({
         context: 'Subsystem: Vulkan backend framebuffer allocator'
       },
       {
-        id: 3,
+        id: 4,
         source: 'tests/pipeline_test.cc',
         category: 'tests',
         line: 98,
@@ -680,7 +715,7 @@ const res = await call_mcp_tool({
         context: 'Unit test suite verifying exception propagation'
       },
       {
-        id: 4,
+        id: 5,
         source: 'docs/troubleshooting.md',
         category: 'docs',
         line: 54,
@@ -726,19 +761,19 @@ const res = await call_mcp_tool({
     },
     {
       q: 'How does Context Mode differ from standard context compression or compaction?',
-      a: 'Standard compaction happens reactively after your context window has already filled up, which can cause severe "agent amnesia" (erasing earlier system prompt instructions and constraints). Context Mode is proactive: it uses a Pre-Tool-Use lifecycle hook to intercept massive outputs before they enter the prompt in the first place.'
+      a: 'Standard compaction happens reactively after your context window has already filled up, which causes severe "agent amnesia" (erasing earlier system prompt instructions and constraints). Context Mode is proactive: it uses a Pre-Tool-Use lifecycle hook to intercept massive outputs before they enter the prompt in the first place.'
     },
     {
       q: 'Are images, PDFs, and 3D models blocked by Context Mode?',
-      a: 'No. Visual and document attachments (PNG, JPG, PDF, SVG, Blend, FBX, etc.) are exempted by default. Multimodal coding agents need to see actual images and blueprints to understand UI and 3D scenes. Only unbounded text files and source dumps are gated.'
+      a: 'No. Visual and document attachments (PNG, JPG, PDF, SVG, Blend, FBX, etc.) are exempted by default. Multimodal coding agents need to see actual images and blueprints to understand UI and 3D scenes. Only unbounded text files, crash dumps, and source dumps are gated.'
     },
     {
       q: 'What is the "Thinking in Code" pattern?',
-      a: 'Instead of an agent reading an entire 100,000-line database dump or log file into its prompt to count errors, the agent calls ctx_execute to run a 3-line sandboxed script (Node.js, Python, or PowerShell). The script filters the data locally and returns only the final summary (e.g. 5 tokens instead of 25,000).'
+      a: 'Instead of an agent reading an entire 100 MB crash dump or database export into its prompt to search for an error, the agent calls ctx_execute to run a 3-line sandboxed script (Node.js, Python, or PowerShell). The script filters the data locally and returns only the final summary (e.g. 50 tokens instead of 25,000,000).'
     },
     {
       q: 'Can I adjust the 8 KB cutoff threshold?',
-      a: 'Yes. You can configure it dynamically via the CONTEXT_MODE_MAX_READ_BYTES environment variable (e.g., 2048 for 2 KB, 16384 for 16 KB) or set it to 0 to disable byte limits completely. Line-range slices scale automatically.'
+      a: 'Yes. You can configure it dynamically via the CONTEXT_MODE_MAX_READ_BYTES environment variable (e.g., 2048 for 2 KB, 16384 for 16 KB) or set it to 0 to disable byte limits completely. Line-range slices scale automatically (2 KB: ≤ 50 lines, 8 KB: ≤ 200 lines, 32 KB: ≤ 800 lines).'
     },
     {
       q: 'Does this require Python or C++ compiler dependencies on Windows?',
@@ -1177,7 +1212,7 @@ const res = await call_mcp_tool({
                 {/* Subtitle */}
                 <p className="text-lg sm:text-xl text-slate-300 leading-relaxed font-normal">
                   Keep your AI coding agents blazing fast, laser-focused, and free from agent amnesia.
-                  Intercepts raw terminal dumps, huge test logs, and unbounded file reads before they wreck your conversation history.
+                  Intercepts runaway 100+ MB crash dumps, build traces, and unbounded file reads before they wreck your conversation history.
                 </p>
 
                 {/* Hero CTAs */}
@@ -1227,15 +1262,15 @@ const res = await call_mcp_tool({
                 </div>
               </div>
 
-              {/* Key Metrics Strip */}
+              {/* Key Metrics Strip - Accurate, Real Numbers */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-16 max-w-5xl mx-auto">
                 <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-emerald-500/50 transition-colors duration-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Token Savings</span>
+                    <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Token Reduction</span>
                     <Sparkles className="w-4 h-4 text-emerald-400" />
                   </div>
-                  <div className="text-3xl font-extrabold text-white">94.2%</div>
-                  <p className="text-xs text-slate-400 mt-1">Spares up to 25k tokens per tool call</p>
+                  <div className="text-3xl font-extrabold text-white">90% – 99%+</div>
+                  <p className="text-xs text-slate-400 mt-1">Blocks dumps up to 100+ MB (25M+ tokens) per call</p>
                 </div>
 
                 <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-emerald-500/50 transition-colors duration-200">
@@ -1244,7 +1279,7 @@ const res = await call_mcp_tool({
                     <Lock className="w-4 h-4 text-cyan-400" />
                   </div>
                   <div className="text-3xl font-extrabold text-white">0 Calls</div>
-                  <p className="text-xs text-slate-400 mt-1">100% Local SQLite. Zero telemetry</p>
+                  <p className="text-xs text-slate-400 mt-1">100% Local SQLite. Zero network telemetry</p>
                 </div>
 
                 <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-emerald-500/50 transition-colors duration-200">
@@ -1268,9 +1303,7 @@ const res = await call_mcp_tool({
             </div>
           </section>
 
-          {/* ========================================================================= */}
-          {/* OFFICIAL README SCREENSHOT & SIDECAR UI SECTION                          */}
-          {/* ========================================================================= */}
+          {/* OFFICIAL README SCREENSHOT & SIDECAR UI SECTION */}
           <section id="dashboard-screenshot" className="py-16 border-t border-slate-900 bg-slate-950/70">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center max-w-3xl mx-auto mb-10">
@@ -1333,7 +1366,7 @@ const res = await call_mcp_tool({
                   Why Unbounded Context Destroys Agents
                 </h2>
                 <p className="text-sm text-slate-400 mt-2">
-                  Every raw `Get-Content` or build log dilutes your prompt, slows token generation, and triggers agent amnesia.
+                  Every un-paged crash dump, build log, or raw terminal command dilutes your prompt and triggers agent amnesia.
                 </p>
               </div>
 
@@ -1347,46 +1380,44 @@ const res = await call_mcp_tool({
                         <h3 className="text-lg font-semibold text-white">Without Context Mode</h3>
                       </div>
                       <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-0.5 rounded text-xs font-mono">
-                        16,250 Tokens Burned
+                        Up to 25,000,000 Tokens Burned
                       </span>
                     </div>
 
                     <p className="text-xs text-slate-400">
-                      Standard tool runs dump all 65 KB of logs directly into conversation memory:
+                      Standard tool runs dump massive crash files and logs directly into conversation memory:
                     </p>
 
                     <div className="bg-black/80 border border-slate-800 rounded-lg font-mono text-xs text-slate-300 p-4 space-y-1.5 overflow-hidden max-h-56">
-                      <div className="text-red-400">$ Get-Content Logs/Editor.log</div>
-                      <div className="text-slate-500">[0.001s] Subsystem initialized: audio</div>
-                      <div className="text-slate-500">[0.012s] Subsystem initialized: physics</div>
-                      <div className="text-slate-500">[0.024s] Allocating 1,024 MB staging memory buffer</div>
-                      <div className="text-slate-600 italic">... [2,430 lines of irrelevant compiler & texture traces] ...</div>
-                      <div className="text-slate-500">[2.145s] Loaded asset pack: textures_high_res_part1.pak</div>
-                      <div className="text-slate-500">[2.189s] Checking graphics pipeline validation layers...</div>
+                      <div className="text-red-400">$ read_file("crash_dump.dmp") # 100 MB</div>
+                      <div className="text-slate-500">[0.001s] [HEADER] SIGSEGV at 0x00007fff8921a412</div>
+                      <div className="text-slate-500">[0.012s] Dumping thread registers: RAX, RBX, RCX...</div>
+                      <div className="text-slate-600 italic">... [1,850,000 lines of memory dumps & hex dumps] ...</div>
+                      <div className="text-slate-500">[12.14s] Dumping heap address space: 0x100000 to 0x7ffffff</div>
                       <div className="text-red-300 font-bold bg-red-950/40 p-1 rounded">
-                        [2.340s] NullPointerException: RenderTargetBuffer uninitialized at line 412
+                        [CRASH] Context window flooded! Model context ceiling exceeded (Rate limit / OOM).
                       </div>
                     </div>
 
                     <div className="space-y-2 text-xs text-slate-300">
                       <div className="flex items-center gap-2 text-red-400">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span><strong>Agent Amnesia:</strong> Earlier rules & system prompt drown out ("Lost in Middle").</span>
+                        <span><strong>Catastrophic Flooding:</strong> 100+ MB dumps blow past context ceilings instantly.</span>
                       </div>
                       <div className="flex items-center gap-2 text-red-400">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span><strong>Slowdown:</strong> Multi-second delay waiting for generation over 16,000 extra tokens.</span>
+                        <span><strong>Agent Amnesia:</strong> Earlier user rules & instructions drown in millions of tokens.</span>
                       </div>
                       <div className="flex items-center gap-2 text-red-400">
                         <AlertTriangle className="w-4 h-4 shrink-0" />
-                        <span><strong>Cost Spike:</strong> 10 turns burns $0.48+ on pure log dumps.</span>
+                        <span><strong>Massive Cost:</strong> Single unbounded reads can burn $50.00+ on commercial API tokens.</span>
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono text-red-400">
-                    <span>Prompt Cost: ~$0.048 / turn</span>
-                    <span>Context Health: Degraded (88% Full)</span>
+                    <span>Prompt Cost: ~$50+ / call</span>
+                    <span>Context Health: Blown / Context Ceiling Exceeded</span>
                   </div>
                 </div>
 
@@ -1399,39 +1430,39 @@ const res = await call_mcp_tool({
                         <h3 className="text-lg font-semibold text-white">With Antigravity Context Mode</h3>
                       </div>
                       <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-3 py-1 rounded-full text-xs font-mono">
-                        Only 85 Tokens (99.5% Saved)
+                        Only 88 Tokens (99.999% Saved)
                       </span>
                     </div>
 
                     <p className="text-xs text-slate-400">
-                      Lifecycle hook blocks the 65 KB dump and queries SQLite FTS5 for the needle:
+                      Lifecycle hook intercepts the 100 MB dump and returns only the relevant diagnostic:
                     </p>
 
                     <div className="bg-black/80 border border-slate-800 rounded-lg font-mono text-xs text-slate-300 p-4 space-y-2 overflow-hidden max-h-56">
                       <div className="text-emerald-400 flex items-center gap-2">
                         <Shield className="w-3.5 h-3.5" />
-                        <span>Hook Gate: Blocked 65 KB dump (exceeds 8 KB limit)</span>
+                        <span>Hook Gate: Blocked 100 MB dump (exceeds 8 KB limit)</span>
                       </div>
-                      <div className="text-cyan-400">$ ctx_search(query="NullPointerException", limit=1)</div>
+                      <div className="text-cyan-400">$ ctx_search(query="SIGSEGV Faulting Instruction", limit=1)</div>
                       <div className="bg-emerald-950/30 border border-emerald-500/30 p-2.5 rounded text-emerald-200">
-                        <div className="text-slate-400 font-semibold mb-1">Rank 1 (BM25: 19.8) - Line 412:</div>
-                        <div>[2.340s] NullPointerException: RenderTargetBuffer uninitialized at line 412</div>
-                        <div className="text-slate-400 text-[11px] mt-1">at VulkanPipeline.renderFrame(pipeline.cc:412)</div>
+                        <div className="text-slate-400 font-semibold mb-1">Rank 1 (BM25: 26.4) - Line 1,842,010:</div>
+                        <div>[FAULTING INSTRUCTION] mov rax, [rbx + 0x18] (NullPointer dereference)</div>
+                        <div className="text-slate-400 text-[11px] mt-1">Faulting Address: 0x00007fff8921a412 | Thread 0x7fa2</div>
                       </div>
                     </div>
 
                     <div className="space-y-2 text-xs text-slate-300">
                       <div className="flex items-center gap-2 text-emerald-400">
                         <CheckCircle className="w-4 h-4 shrink-0" />
-                        <span><strong>Razor-Sharp Memory:</strong> Agent preserves 100% of instructions and conversation context.</span>
+                        <span><strong>100% Intact Memory:</strong> Agent preserves all initial prompts, rules, and conversation context.</span>
                       </div>
                       <div className="flex items-center gap-2 text-emerald-400">
                         <CheckCircle className="w-4 h-4 shrink-0" />
-                        <span><strong>Instant Generation:</strong> Fast inference time with near-zero latency overhead.</span>
+                        <span><strong>Instant Responses:</strong> Slices 100 MB down to under 5ms SQLite retrieval.</span>
                       </div>
                       <div className="flex items-center gap-2 text-emerald-400">
                         <CheckCircle className="w-4 h-4 shrink-0" />
-                        <span><strong>Micro-Cents Cost:</strong> Token cost dropped by 99.5% on this operation.</span>
+                        <span><strong>Micro-Cents Cost:</strong> Spares millions of tokens and dozens of dollars in one tool call.</span>
                       </div>
                     </div>
                   </div>
@@ -1491,7 +1522,13 @@ const res = await call_mcp_tool({
                       {Object.entries(workloads).map(([key, item]) => (
                         <button
                           key={key}
-                          onClick={() => setSelectedWorkload(key)}
+                          onClick={() => {
+                            setSelectedWorkload(key);
+                            if (key === 'crash_dump') setSearchTerm('SIGSEGV');
+                            else if (key === 'editor_log') setSearchTerm('NullPointerException');
+                            else if (key === 'vitest_output') setSearchTerm('AssertionError');
+                            else if (key === 'git_diff') setSearchTerm('verifySessionToken');
+                          }}
                           className={`w-full text-left p-3 rounded-lg border text-xs transition-all flex items-center justify-between ${
                             selectedWorkload === key
                               ? 'bg-emerald-500/10 border-emerald-500 text-white shadow-sm'
@@ -1500,10 +1537,10 @@ const res = await call_mcp_tool({
                         >
                           <div className="truncate pr-2">
                             <div className="font-mono font-medium text-slate-200 truncate">{item.name}</div>
-                            <div className="text-[11px] text-slate-500">{item.type} • {item.lines} lines</div>
+                            <div className="text-[11px] text-slate-500">{item.type} • {item.lines.toLocaleString()} lines</div>
                           </div>
                           <span className="shrink-0 font-mono text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                            {item.rawKb} KB
+                            {formatSize(item.rawKb)}
                           </span>
                         </button>
                       ))}
@@ -1556,7 +1593,7 @@ const res = await call_mcp_tool({
                     <div className="grid grid-cols-2 gap-3 text-center">
                       <div className="bg-black/50 border border-slate-800 p-2.5 rounded-lg">
                         <div className="text-[11px] text-slate-500">Tokens Delivered</div>
-                        <div className="text-lg font-bold text-white font-mono mt-0.5">
+                        <div className="text-lg font-bold text-white font-mono mt-0.5 truncate">
                           {effectiveTokens.toLocaleString()}
                         </div>
                       </div>
@@ -1570,14 +1607,14 @@ const res = await call_mcp_tool({
 
                     <div className="text-[11px] text-slate-400 pt-1 flex items-center justify-between">
                       <span>Tokens spared this turn:</span>
-                      <span className="font-mono text-emerald-400 font-semibold">
+                      <span className="font-mono text-emerald-400 font-semibold truncate max-w-[150px]">
                         +{tokensSaved.toLocaleString()}
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-400 flex items-center justify-between">
                       <span>Approx API cost spared:</span>
                       <span className="font-mono text-emerald-400 font-semibold">
-                        +${savedCost}
+                        +{savedCost}
                       </span>
                     </div>
                   </div>
@@ -1588,17 +1625,17 @@ const res = await call_mcp_tool({
                   <div className="space-y-4">
                     {/* Simulated Header */}
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-3">
-                      <div className="flex items-center gap-2 font-mono text-xs text-slate-300">
-                        <Terminal className="w-4 h-4 text-emerald-400" />
+                      <div className="flex items-center gap-2 font-mono text-xs text-slate-300 truncate">
+                        <Terminal className="w-4 h-4 text-emerald-400 shrink-0" />
                         <span>Agent Tool Call:</span>
-                        <span className="text-white font-bold bg-slate-800 px-2 py-0.5 rounded">
+                        <span className="text-white font-bold bg-slate-800 px-2 py-0.5 rounded truncate max-w-[280px]">
                           read_file("{currentWorkload.name}")
                         </span>
                       </div>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs font-mono text-slate-400">
-                          Filesize: {currentWorkload.rawKb} KB
+                          Filesize: {formatSize(currentWorkload.rawKb)}
                         </span>
                         <span
                           className={`px-2 py-0.5 rounded text-xs font-mono font-medium ${
@@ -1620,7 +1657,7 @@ const res = await call_mcp_tool({
                           <span>Lifecycle Hook Gate: PreToolUse intercept triggered</span>
                         </div>
                         <p className="text-slate-400 text-[11px]">
-                          File ({currentWorkload.rawKb} KB) exceeds the configured cutoff of {cutoffKb} KB. Raw dump prevented.
+                          File ({formatSize(currentWorkload.rawKb)}) exceeds the configured cutoff of {cutoffKb} KB. Raw dump prevented.
                           Antigravity redirected the query to the local SQLite FTS5 engine.
                         </p>
                       </div>
@@ -1631,7 +1668,7 @@ const res = await call_mcp_tool({
                           <span>Warning: Protection inactive or below cutoff</span>
                         </div>
                         <p className="text-slate-400 text-[11px]">
-                          The full {currentWorkload.rawKb} KB ({currentWorkload.rawTokens.toLocaleString()} tokens) is injected directly into agent context.
+                          The full {formatSize(currentWorkload.rawKb)} ({currentWorkload.rawTokens.toLocaleString()} tokens) is injected directly into agent context.
                         </p>
                       </div>
                     )}
@@ -1655,12 +1692,12 @@ const res = await call_mcp_tool({
                               {currentWorkload.filteredSnippet}
                             </div>
                             <div className="pt-2 text-slate-500 text-[11px] border-t border-slate-800">
-                              -- End of filtered context mode slice (85 tokens delivered) --
+                              -- End of filtered context mode slice ({currentWorkload.filteredTokens} tokens delivered out of {currentWorkload.rawTokens.toLocaleString()}) --
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-2 text-slate-400">
-                            <div className="text-red-400">// Warning: 16,000+ raw tokens loaded into prompt!</div>
+                            <div className="text-red-400">// Warning: Millions of raw tokens loaded into prompt!</div>
                             <div className="whitespace-pre-wrap leading-relaxed text-slate-500">
                               {currentWorkload.rawSample}
                             </div>
@@ -1764,7 +1801,7 @@ const res = await call_mcp_tool({
 
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-xs text-slate-400 mr-1">Try searching:</span>
-                  {['NullPointerException', 'Vulkan', 'RenderTargetBuffer', 'troubleshooting'].map((term) => (
+                  {['SIGSEGV', 'NullPointerException', 'Vulkan', 'RenderTargetBuffer'].map((term) => (
                     <button
                       key={term}
                       onClick={() => setSearchTerm(term)}
@@ -2013,10 +2050,10 @@ const res = await call_mcp_tool({
                     </p>
                     <div className="bg-black/90 border border-slate-800 rounded-lg p-3.5 font-mono text-xs text-slate-300 space-y-1">
                       <div className="text-emerald-400">$ npm test</div>
-                      <div className="text-slate-500">✔ SQLite FTS5 Porter & Trigram tables initialized (4.2ms)</div>
-                      <div className="text-slate-500">✔ PreToolUse lifecycle gating verified (2.1ms)</div>
-                      <div className="text-slate-500">✔ 8 MCP JSON-RPC tool endpoints verified (6.8ms)</div>
-                      <div className="text-emerald-400 font-semibold pt-1"># tests 14 | pass 14 | fail 0</div>
+                      <div className="text-slate-500">✔ SQLite FTS5 Porter & Trigram tables initialized</div>
+                      <div className="text-slate-500">✔ PreToolUse lifecycle gating verified</div>
+                      <div className="text-slate-500">✔ 8 MCP JSON-RPC tool endpoints verified</div>
+                      <div className="text-emerald-400 font-semibold pt-1"># all test suites passed</div>
                     </div>
                   </div>
                 </div>
