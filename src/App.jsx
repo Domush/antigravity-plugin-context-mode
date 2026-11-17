@@ -41,7 +41,7 @@ import {
 // Pre-structured static fallback changelog data
 const BUNDLED_CHANGELOG = [
   {
-    version: '1.3.0',
+    version: '1.3.2',
     date: '2026-11-15',
     isLatest: true,
     added: [
@@ -252,7 +252,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Live Dynamic Plugin Metadata
-  const [latestVersion, setLatestVersion] = useState('1.3.0');
+  const [latestVersion, setLatestVersion] = useState('1.3.2');
   const [isLiveVersion, setIsLiveVersion] = useState(false);
   const [changelogData, setChangelogData] = useState(BUNDLED_CHANGELOG);
 
