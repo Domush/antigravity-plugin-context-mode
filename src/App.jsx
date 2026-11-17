@@ -1528,7 +1528,7 @@ const res = await call_mcp_tool({
 
                     <div className="space-y-2">
                       {Object.entries(workloads)
-                        .filter(([_, item]) => workloadCategory === 'enterprise' || item.category === workloadCategory)
+                        .filter(([_, item]) => workloadCategory === 'all' || item.category === workloadCategory)
                         .map(([key, item]) => (
                           <button
                             key={key}
