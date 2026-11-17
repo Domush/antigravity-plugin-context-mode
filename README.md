@@ -10,10 +10,10 @@
 
 **Antigravity Context Mode** is a free, local-first plugin built specifically for the **Google Antigravity App**. It prevents terminal commands, build outputs, multi-megabyte source files, and massive datasets from flooding your conversation history — saving thousands of tokens per turn and stopping "agent amnesia" in its tracks.
 
-> 🌐 **Live Website, Simulator & Changelog:** [domush.github.io/antigravity-plugin-context-mode](https://domush.github.io/antigravity-plugin-context-mode/)
+> 🌐 **Website and Simulator:** [domush.github.io/antigravity-plugin-context-mode](https://domush.github.io/antigravity-plugin-context-mode/)
 
 ---
-<img width="817" height="690" alt="Antigravity Context Mode Dashboard" src="https://github.com/user-attachments/assets/dbf6d666-58d0-48f3-bc02-9783acf3fb37" />
+<img width="846" height="503" alt="image" src="https://github.com/user-attachments/assets/2b89e947-4b53-42a6-a0ad-ea744de96c41" />
 
 ## The Problem: Context Window Bloat
 
