@@ -1528,7 +1528,7 @@ const res = await call_mcp_tool({
 
                     <div className="space-y-2">
                       {Object.entries(workloads)
-                        .filter(([_, item]) => workloadCategory === 'all' || item.category === workloadCategory)
+                        .filter(([_, item]) => workloadCategory === 'enterprise' || item.category === workloadCategory)
                         .map(([key, item]) => (
                           <button
                             key={key}
@@ -2352,7 +2352,7 @@ const res = await call_mcp_tool({
           </div>
 
           <div className="text-slate-500 text-[11px]">
-            Designed natively for Google Antigravity IDE & Agents
+            A native Google Antigravity App plugin
           </div>
         </div>
       </footer>
