@@ -262,7 +262,7 @@ export default function App() {
 
   // Playground / Simulator State
   const [selectedWorkload, setSelectedWorkload] = useState('crash_dump');
-  const [workloadCategory, setWorkloadCategory] = useState('all');
+  const [workloadCategory, setWorkloadCategory] = useState('enterprise');
   const [cutoffKb, setCutoffKb] = useState(8);
   const [isProtected, setIsProtected] = useState(true);
   const [searchTerm, setSearchTerm] = useState('SIGSEGV');
@@ -1313,7 +1313,7 @@ const res = await call_mcp_tool({
 
                 <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-black">
                   <img
-                    src="https://github.com/user-attachments/assets/dbf6d666-58d0-48f3-bc02-9783acf3fb37"
+                    src="https://private-user-images.githubusercontent.com/1557976/708540695-2b89e947-4b53-42a6-a0ad-ea744de96c41.png"
                     alt="Antigravity Context Mode Dashboard"
                     className="w-full h-auto object-contain mx-auto rounded-lg shadow-lg"
                     loading="lazy"
