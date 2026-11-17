@@ -1313,7 +1313,7 @@ const res = await call_mcp_tool({
 
                 <div className="relative rounded-xl overflow-hidden border border-slate-800 bg-black">
                   <img
-                    src="https://private-user-images.githubusercontent.com/1557976/708540695-2b89e947-4b53-42a6-a0ad-ea744de96c41.png"
+                    src="https://github.com/user-attachments/assets/2b89e947-4b53-42a6-a0ad-ea744de96c41"
                     alt="Antigravity Context Mode Dashboard"
                     className="w-full h-auto object-contain mx-auto rounded-lg shadow-lg"
                     loading="lazy"
