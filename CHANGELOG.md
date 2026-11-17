@@ -2,6 +2,12 @@
 
 All notable changes to `antigravity-plugin-context-mode` will be documented in this file.
 
+## [1.3.2] - 2026-11-17
+
+### Documentation
+- **User-Friendly Documentation**: Streamlined `README.md` to focus on end-user benefits, 1-click `npx` installation (global & workspace modes), real-world token savings benchmarks, and interactive sidecar controls.
+- **Synchronized Manifest Version**: Updated `plugin.json` version to match release tag.
+
 ## [1.3.1] - 2026-11-16
 
 ### Added
