@@ -5,6 +5,7 @@ All notable changes to `antigravity-plugin-context-mode` will be documented in t
 ## [1.5.0] - 2026-11-21
 
 ### Added
+- **SQLite Schema v3 (`path` as Primary Key Everywhere)**: Migrated database schema to v3, promoting `path` to the primary key on `sources(path TEXT PRIMARY KEY)` and foreign reference on `chunks(path UNINDEXED)` / `chunks_tri(path UNINDEXED)`. Seamless automatic migration from existing v2 databases preserves database integrity while eliminating all legacy surrogate ID generators.
 - **Just-In-Time On-Demand Indexing (`ctx_search`)**: Refactored `ctx_search` to support `path` for individual files, directory paths, and remote URLs. Unindexed or modified files are automatically checked against file modification timestamps (`mtime`) and indexed Just-In-Time before searching, returning instant, fresh hits in a single call.
 - **Reverse Search for Log Files (`reverse: true`)**: Added optional `reverse` parameter to `ctx_search` to sort search hits by chunk order in reverse (`b.ord - a.ord`). Prioritizes the latest events, errors, and fatal crashes at the end of large log files first.
 - **Snippet Centering on Search Hits**: Window search snippets around the matched query term position rather than slicing from offset 0, ensuring matching context is visible even in large chunks.

@@ -633,7 +633,7 @@ test("PreToolUse hook - applies to subagents and primary agents alike and shares
   }
 });
 
-test("PreToolUse hook - auto-indexes read_file over cutoff with workspace-relative sourceId", async () => {
+test("PreToolUse hook - auto-indexes read_file over cutoff with workspace-relative path", async () => {
   const hookFile = path.resolve("hooks/pre-tool-use.js");
   const testDir = path.join(os.tmpdir(), `ctxm-autoindex-${Date.now()}`);
   fs.mkdirSync(testDir, { recursive: true });

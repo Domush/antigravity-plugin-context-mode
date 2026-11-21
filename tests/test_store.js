@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { ContextModeStore } from "../lib/store.js";
 
 test("ContextModeStore - initialization, FTS5 schema, indexing, and RRF search", () => {
@@ -34,7 +35,7 @@ test("ContextModeStore - initialization, FTS5 schema, indexing, and RRF search",
       content: sampleText
     });
 
-    assert.ok(indexRes.sourceId);
+    assert.ok(indexRes.path);
     assert.equal(indexRes.chunkCount >= 1, true);
     assert.equal(indexRes.bytesTotal, Buffer.byteLength(sampleText, "utf8"));
 
@@ -77,8 +78,8 @@ test("ContextModeStore - initialization, FTS5 schema, indexing, and RRF search",
     assert.equal(state.recentSources.length, 1);
     assert.equal(state.recentEvents.length, 1);
 
-    // Chunks inspection by source ID
-    const chunks = store.getSourceChunks(indexRes.sourceId);
+    // Chunks inspection by path
+    const chunks = store.getSourceChunks(indexRes.path);
     assert.ok(chunks.length >= 1);
     assert.ok(chunks[0].body.includes("FlightComputerService"));
 
@@ -347,7 +348,7 @@ test("ContextModeStore - max auto-index bytes cascade and resolveFileSourceId", 
     // 6. Test idempotent re-indexing: old chunks are replaced, not duplicated
     const content1 = "First version with alpha keyword";
     const res1 = store.indexContent({
-      sourceId: "docs/readme.md",
+      path: "docs/readme.md",
       sessionId: sid,
       kind: "file",
       label: "docs/readme.md",
@@ -358,7 +359,7 @@ test("ContextModeStore - max auto-index bytes cascade and resolveFileSourceId", 
 
     const content2 = "Second version with beta keyword replaced";
     const res2 = store.indexContent({
-      sourceId: "docs/readme.md",
+      path: "docs/readme.md",
       sessionId: sid,
       kind: "file",
       label: "docs/readme.md",
@@ -430,6 +431,87 @@ test("ContextModeStore - ensurePathIndexed and search with file and directory pa
     assert.ok(resDir.hits.length >= 1);
     assert.ok(resDir.hits[0].snippet.includes("superHelperToken"));
     assert.equal(resDir.hits[0].path, "src/helper.ts");
+  } finally {
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test("ContextModeStore - automatic migration from schema v2 (id/source_id) to v3 (path)", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctxm-migrate-"));
+  const dbPath = path.join(tmpDir, "legacy_v2.db");
+
+  // Create legacy v2 database manually
+  const rawDb = new DatabaseSync(dbPath);
+  rawDb.exec(`
+    CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    INSERT INTO meta(key, value) VALUES ('schema_version', '2');
+
+    CREATE TABLE sources (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      worktree TEXT NOT NULL,
+      agent TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      label TEXT NOT NULL,
+      bytes_total INTEGER NOT NULL DEFAULT 0,
+      chunk_count INTEGER NOT NULL DEFAULT 0,
+      created_ts INTEGER NOT NULL,
+      created_at TEXT NOT NULL,
+      accessed_ts INTEGER NOT NULL,
+      mtime INTEGER DEFAULT 0
+    );
+
+    CREATE VIRTUAL TABLE chunks USING fts5(
+      source_id UNINDEXED,
+      session_id UNINDEXED,
+      worktree UNINDEXED,
+      agent UNINDEXED,
+      ord UNINDEXED,
+      body,
+      title,
+      tokenize = 'porter unicode61 remove_diacritics 2'
+    );
+
+    CREATE VIRTUAL TABLE chunks_tri USING fts5(
+      source_id UNINDEXED,
+      session_id UNINDEXED,
+      ord UNINDEXED,
+      body,
+      tokenize = 'trigram'
+    );
+  `);
+  rawDb.close();
+
+  // Now open with ContextModeStore which triggers schema upgrade
+  const store = new ContextModeStore({ dbPath });
+  try {
+    store.open();
+
+    const version = store.getMeta("schema_version");
+    assert.equal(version, "3");
+
+    // Check table info for sources
+    const sourceCols = store.db.prepare("PRAGMA table_info(sources)").all().map((c) => c.name);
+    assert.ok(sourceCols.includes("path"));
+    assert.equal(sourceCols.includes("id"), false);
+
+    // Verify index and search work on migrated database
+    store.indexContent({
+      path: "migrated/file.js",
+      content: "export function migratedV3Function() { return 123; }",
+      sessionId: "migrated-session"
+    });
+
+    const searchRes = store.search({
+      queries: ["migratedV3Function"],
+      path: "migrated/file.js",
+      sessionId: "migrated-session"
+    });
+
+    assert.ok(searchRes.hits.length >= 1);
+    assert.equal(searchRes.hits[0].path, "migrated/file.js");
+    assert.ok(searchRes.hits[0].snippet.includes("migratedV3Function"));
   } finally {
     store.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });

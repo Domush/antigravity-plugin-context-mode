@@ -27,7 +27,7 @@ test("Tools suite - ctx_execute, ctx_search (JIT indexing), ctx_stats", async ()
 
     assert.equal(execRes.ok, true);
     assert.ok(execRes.output.includes("ANTIGRAVITY_SANDBOX_OUTPUT_123"));
-    assert.ok(execRes.sourceId);
+    assert.ok(execRes.path);
 
     // 2. ctx_index is completely removed
     assert.equal(tools.ctx_index, undefined);

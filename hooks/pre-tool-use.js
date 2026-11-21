@@ -2,7 +2,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ContextModeStore, DEFAULT_MAX_AUTO_INDEX_BYTES, resolveFileSourceId } from "../lib/store.js";
+import { ContextModeStore, DEFAULT_MAX_AUTO_INDEX_BYTES, resolveFilePath } from "../lib/store.js";
 
 export const DEFAULT_MAX_READ_BYTES = 8192; // 8 KB default cutoff
 export const DEFAULT_MAX_LINE_RANGE = 200; // 200 lines max un-indexed slice
@@ -388,7 +388,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
           // Dynamic cutoff check against active setting
           if (maxReadBytes > 0 && stat.size > maxReadBytes) {
             const maxAutoIndexBytes = getMaxAutoIndexBytes(sessionId);
-            const sourceId = resolveFileSourceId(absPath, cwd) || cleanTarget;
+            const targetPath = resolveFilePath(absPath, cwd) || cleanTarget;
 
             let isAutoIndexed = false;
             if (maxAutoIndexBytes > 0 && stat.size <= maxAutoIndexBytes) {
@@ -400,8 +400,8 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
                   worktree: cwd,
                   agent: "antigravity",
                   kind: "file",
-                  label: sourceId,
-                  path: sourceId,
+                  label: targetPath,
+                  path: targetPath,
                   content,
                   mtime: Math.round(stat.mtimeMs)
                 });
@@ -416,7 +416,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
                 `[context-mode protection: auto-indexed] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
                 `exceeding the active ${formatBytes(maxReadBytes)} context limit. ` +
                 `The file has been automatically indexed into Context Mode. ` +
-                `Query it with 'ctx_search(queries: [...], path: "${sourceId}")' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. -Head <lines> or '| Select-Object -First <lines>').`;
+                `Query it with 'ctx_search(queries: [...], path: "${targetPath}")' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. -Head <lines> or '| Select-Object -First <lines>').`;
             } else {
               reason =
                 `[context-mode protection] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
@@ -428,7 +428,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
               shouldDeny: true,
               reason,
               size: stat.size,
-              targetPath: sourceId
+              targetPath
             };
           }
 
@@ -512,7 +512,7 @@ async function main() {
           if (isLargeFile && isWideRange) {
             const lineInstruction = maxLineRange > 0 ? ` or read only the needed lines with StartLine/EndLine (<= ${maxLineRange} lines).` : "";
             const maxAutoIndexBytes = getMaxAutoIndexBytes(sessionId);
-            const sourceId = resolveFileSourceId(absPath, cwd) || filePath;
+            const targetPath = resolveFilePath(absPath, cwd) || filePath;
 
             let isAutoIndexed = false;
             if (maxAutoIndexBytes > 0 && stat.size <= maxAutoIndexBytes) {
@@ -524,8 +524,8 @@ async function main() {
                   worktree: cwd,
                   agent: agentName,
                   kind: "file",
-                  label: sourceId,
-                  path: sourceId,
+                  label: targetPath,
+                  path: targetPath,
                   content,
                   mtime: Math.round(stat.mtimeMs)
                 });
@@ -537,10 +537,10 @@ async function main() {
             let reason = "";
             if (isAutoIndexed) {
               reason =
-                `[context-mode protection: auto-indexed] File '${sourceId}' (${formatBytes(stat.size)}) ` +
+                `[context-mode protection: auto-indexed] File '${targetPath}' (${formatBytes(stat.size)}) ` +
                 `exceeded the active ${formatBytes(maxReadBytes)} context limit. ` +
                 `The file has been automatically indexed into Context Mode. ` +
-                `Query it immediately using 'ctx_search(queries: [...], path: "${sourceId}")'${lineInstruction}`;
+                `Query it immediately using 'ctx_search(queries: [...], path: "${targetPath}")'${lineInstruction}`;
             } else {
               const ceilingNote = maxAutoIndexBytes > 0 && stat.size > maxAutoIndexBytes
                 ? ` and the ${formatBytes(maxAutoIndexBytes)} auto-indexing ceiling`
@@ -556,7 +556,7 @@ async function main() {
               agent: agentName,
               cwd,
               toolName,
-              path: sourceId,
+              path: targetPath,
               size: stat.size,
               reason
             });
