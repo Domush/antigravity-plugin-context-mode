@@ -304,3 +304,71 @@ test("ContextModeStore - accurate context saved calculations without double-coun
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("ContextModeStore - max auto-index bytes cascade and resolveFileSourceId", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctxm-test-autoindex-"));
+  const dbPath = path.join(tmpDir, "test.db");
+  const store = new ContextModeStore({ dbPath });
+
+  try {
+    const sid = "test-session-autoindex";
+
+    // 1. Default max auto-index bytes is 50 MB
+    assert.equal(store.getMaxAutoIndexBytes(sid), 50 * 1024 * 1024);
+    assert.equal(store.getMaxAutoIndexBytes(null), 50 * 1024 * 1024);
+
+    // 2. Set lifetime limit to 10 MB
+    store.setMaxAutoIndexBytes(10 * 1024 * 1024, "all");
+    assert.equal(store.getMaxAutoIndexBytes(null), 10 * 1024 * 1024);
+    assert.equal(store.getMaxAutoIndexBytes("new-session"), 10 * 1024 * 1024);
+
+    // 3. Set session-specific override
+    store.setMaxAutoIndexBytes(1 * 1024 * 1024, sid);
+    assert.equal(store.getMaxAutoIndexBytes(sid), 1 * 1024 * 1024);
+    assert.equal(store.getMaxAutoIndexBytes("new-session"), 10 * 1024 * 1024);
+
+    // 4. Set to 0 (disabled)
+    store.setMaxAutoIndexBytes(0, sid);
+    assert.equal(store.getMaxAutoIndexBytes(sid), 0);
+
+    // 5. Test resolveFileSourceId
+    const projectDir = path.join(tmpDir, "my-project");
+    fs.mkdirSync(projectDir, { recursive: true });
+    const subFile = path.join(projectDir, "src", "index.ts");
+
+    const relSourceId = store.resolveFileSourceId(subFile, projectDir);
+    assert.equal(relSourceId, "src/index.ts");
+
+    const outsideFile = path.join(tmpDir, "other", "config.json");
+    const absSourceId = store.resolveFileSourceId(outsideFile, projectDir);
+    assert.equal(absSourceId.includes("\\"), false); // Normalized with forward slashes
+    assert.ok(absSourceId.endsWith("other/config.json"));
+
+    // 6. Test idempotent re-indexing: old chunks are replaced, not duplicated
+    const content1 = "First version with alpha keyword";
+    const res1 = store.indexContent({
+      sourceId: "docs/readme.md",
+      sessionId: sid,
+      kind: "file",
+      label: "docs/readme.md",
+      content: content1
+    });
+    assert.equal(store.getSourceChunks("docs/readme.md").length, 1);
+    assert.ok(store.search({ queries: ["alpha"], sessionId: sid }).hits.length >= 1);
+
+    const content2 = "Second version with beta keyword replaced";
+    const res2 = store.indexContent({
+      sourceId: "docs/readme.md",
+      sessionId: sid,
+      kind: "file",
+      label: "docs/readme.md",
+      content: content2
+    });
+    // Chunk count must still be 1 (not 2 from accumulating)
+    assert.equal(store.getSourceChunks("docs/readme.md").length, 1);
+    assert.ok(store.getSourceChunks("docs/readme.md")[0].body.includes("beta"));
+  } finally {
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

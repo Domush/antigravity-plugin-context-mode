@@ -9,4 +9,5 @@ Thumbs.db
 .context-mode/
 dist/
 coverage/
+test-results.xml
 .tmp/

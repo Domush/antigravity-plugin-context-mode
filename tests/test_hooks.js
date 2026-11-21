@@ -452,11 +452,132 @@ test("SessionStart hook - injects status system message and resets session overr
 
     assert.ok(result.injectSteps);
     assert.equal(result.injectSteps.length, 1);
-    assert.ok(result.injectSteps[0].systemMessage.systemMessage.includes("context-mode active"));
+    const sysMsg = result.injectSteps[0].systemMessage.systemMessage;
+    assert.ok(sysMsg.includes("context-mode active"));
+    assert.ok(sysMsg.includes("Active single-operation read cutoff: 4 KB (4,096 bytes)"));
+    assert.ok(sysMsg.includes("NOT your LLM context window"));
+    assert.ok(sysMsg.includes("Exempt file types (NEVER blocked by context-mode"));
+    assert.ok(sysMsg.includes("Images"));
+    assert.ok(sysMsg.includes("Documents & Office"));
+    assert.ok(sysMsg.includes(".pdf"));
+    assert.ok(sysMsg.includes(".png"));
 
     // Session override was cleared, so session cutoff defaults back to lifetime cutoff (4096)
     assert.equal(store.getCutoff("app"), 4096);
     assert.equal(store.getCutoff("test-conv-new"), 4096);
+  } finally {
+    store.close();
+  }
+});
+
+test("PreToolUse hook - denial message dynamically reflects live exempt categories and custom extensions", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const tmpFile = path.join(os.tmpdir(), "dyn_exempt_test.txt");
+  fs.writeFileSync(tmpFile, "X".repeat(20000)); // 20 KB
+  const { ContextModeStore } = await import("../lib/store.js");
+  const store = new ContextModeStore();
+  const testConv = `conv-dyn-exempt-${Date.now()}`;
+
+  try {
+    // 1. Initial denial contains standard active categories
+    const res1 = await runHook(hookFile, {
+      conversationId: testConv,
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpFile }
+      }
+    });
+    assert.equal(res1.decision, "deny");
+    assert.ok(res1.reason.includes("Live exempt types never blocked:"));
+    assert.ok(res1.reason.includes("Images"));
+    assert.ok(res1.reason.includes("Documents & Office"));
+
+    // 2. Add custom extension .supercustom
+    store.addCustomExemptExtension(".supercustom", testConv);
+    const res2 = await runHook(hookFile, {
+      conversationId: testConv,
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpFile }
+      }
+    });
+    assert.equal(res2.decision, "deny");
+    assert.ok(res2.reason.includes(".supercustom"));
+
+    // 3. Disable images and documents categories
+    store.toggleExemptCategory("images", false, testConv);
+    store.toggleExemptCategory("documents", false, testConv);
+    const res3 = await runHook(hookFile, {
+      conversationId: testConv,
+      toolCall: {
+        name: "read_file",
+        args: { Path: tmpFile }
+      }
+    });
+    assert.equal(res3.decision, "deny");
+    assert.ok(!res3.reason.includes("Images"));
+    assert.ok(!res3.reason.includes("Documents & Office"));
+    assert.ok(res3.reason.includes(".supercustom"));
+  } finally {
+    store.close();
+    if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+  }
+});
+
+test("PreInvocation hook - announces active limit and exempt files when config changes, quiet when unchanged", async () => {
+  const hookFile = path.resolve("hooks/pre-invocation.js");
+  const { ContextModeStore } = await import("../lib/store.js");
+  const store = new ContextModeStore();
+  const testSid = `conv-preinv-${Date.now()}`;
+
+  try {
+    store.setCutoff(8192, testSid);
+
+    // 1. First invocation (not yet informed)
+    const res1 = await runHook(hookFile, {
+      conversationId: testSid
+    });
+    assert.ok(res1.injectSteps);
+    assert.equal(res1.injectSteps.length, 1);
+    const msg1 = res1.injectSteps[0].systemMessage.systemMessage;
+    assert.ok(msg1.includes("context-mode active"));
+    assert.ok(msg1.includes("Active single-operation read cutoff: 8 KB"));
+    assert.ok(msg1.includes("NOT your LLM context window"));
+    assert.ok(msg1.includes("Exempt file types (NEVER blocked by context-mode"));
+    assert.ok(msg1.includes(".pdf"));
+    assert.ok(msg1.includes(".png"));
+
+    // 2. Second invocation with no changes -> quiet, outputs empty object
+    const res2 = await runHook(hookFile, {
+      conversationId: testSid
+    });
+    assert.equal(res2.injectSteps, undefined);
+
+    // 3. User changes cutoff to 32 KB
+    store.setCutoff(32768, testSid);
+    const res3 = await runHook(hookFile, {
+      conversationId: testSid
+    });
+    assert.ok(res3.injectSteps);
+    assert.equal(res3.injectSteps.length, 1);
+    const msg3 = res3.injectSteps[0].systemMessage.systemMessage;
+    assert.ok(msg3.includes("context-mode config update"));
+    assert.ok(msg3.includes("Active single-operation read cutoff: 32 KB (32,768 bytes)"));
+
+    // 4. Invocations stay quiet after update
+    const res4 = await runHook(hookFile, {
+      conversationId: testSid
+    });
+    assert.equal(res4.injectSteps, undefined);
+
+    // 5. User adds a custom exempt extension (.parquet)
+    store.addCustomExemptExtension(".parquet", testSid);
+    const res5 = await runHook(hookFile, {
+      conversationId: testSid
+    });
+    assert.ok(res5.injectSteps);
+    const msg5 = res5.injectSteps[0].systemMessage.systemMessage;
+    assert.ok(msg5.includes(".parquet"));
   } finally {
     store.close();
   }
@@ -517,5 +638,141 @@ test("PreToolUse hook - applies to subagents and primary agents alike and shares
   } finally {
     store.close();
     if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+  }
+});
+
+test("PreToolUse hook - auto-indexes read_file over cutoff with workspace-relative sourceId", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const testDir = path.join(os.tmpdir(), `ctxm-autoindex-${Date.now()}`);
+  fs.mkdirSync(testDir, { recursive: true });
+  const testFile = path.join(testDir, "large_data.json");
+  const sampleData = JSON.stringify({
+    service: "OrbitalTelemetry",
+    records: Array.from({ length: 400 }, (_, i) => ({ id: i, velocity: 7800 + i, tag: "supercluster-beta" }))
+  }, null, 2);
+  fs.writeFileSync(testFile, sampleData);
+
+  const testConvId = `conv-autoindex-${Date.now()}`;
+  const { ContextModeStore } = await import("../lib/store.js");
+  const store = new ContextModeStore();
+
+  try {
+    const result = await runHook(hookFile, {
+      conversationId: testConvId,
+      cwd: testDir,
+      toolCall: {
+        name: "read_file",
+        args: { Path: testFile }
+      }
+    });
+
+    assert.equal(result.decision, "deny");
+    assert.ok(result.reason.includes("[context-mode protection: auto-indexed]"));
+    assert.ok(result.reason.includes("large_data.json"));
+    assert.ok(result.reason.includes("ctx_search"));
+    assert.ok(result.reason.includes('sourceId: "large_data.json"'));
+
+    // Verify file content was actually indexed into SQLite FTS5 under sourceId
+    const chunks = store.getSourceChunks("large_data.json");
+    assert.ok(chunks.length >= 1);
+    assert.ok(chunks[0].body.includes("OrbitalTelemetry"));
+
+    // Verify search works immediately on the indexed content
+    const searchRes = store.search({
+      queries: ["supercluster-beta"],
+      sourceId: "large_data.json",
+      sessionId: testConvId
+    });
+    assert.ok(searchRes.hits.length >= 1);
+    assert.ok(searchRes.hits[0].snippet.includes("supercluster-beta"));
+  } finally {
+    store.close();
+    fs.rmSync(testDir, { recursive: true, force: true });
+  }
+});
+
+test("PreToolUse hook - auto-indexes file dump commands (cat, Get-Content)", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const testDir = path.join(os.tmpdir(), `ctxm-cat-autoindex-${Date.now()}`);
+  fs.mkdirSync(testDir, { recursive: true });
+  const testFile = path.join(testDir, "app.log");
+  const logData = "CRITICAL: Database connection pool exhausted\n".repeat(400); // ~18 KB
+  fs.writeFileSync(testFile, logData);
+
+  const testConvId = `conv-cat-autoindex-${Date.now()}`;
+  const { ContextModeStore } = await import("../lib/store.js");
+  const store = new ContextModeStore();
+
+  try {
+    const result = await runHook(hookFile, {
+      conversationId: testConvId,
+      cwd: testDir,
+      toolCall: {
+        name: "run_command",
+        args: { CommandLine: `cat "${testFile}"` }
+      }
+    });
+
+    assert.equal(result.decision, "deny");
+    assert.ok(result.reason.includes("[context-mode protection: auto-indexed]"));
+    assert.ok(result.reason.includes("app.log"));
+    assert.ok(result.reason.includes("ctx_search"));
+
+    // Verify indexed
+    const chunks = store.getSourceChunks("app.log");
+    assert.ok(chunks.length >= 1);
+  } finally {
+    store.close();
+    fs.rmSync(testDir, { recursive: true, force: true });
+  }
+});
+
+test("PreToolUse hook - skips auto-indexing when file exceeds max auto-index limit or limit is 0", async () => {
+  const hookFile = path.resolve("hooks/pre-tool-use.js");
+  const testDir = path.join(os.tmpdir(), `ctxm-limit-skip-${Date.now()}`);
+  fs.mkdirSync(testDir, { recursive: true });
+  const testFile = path.join(testDir, "huge.txt");
+  fs.writeFileSync(testFile, "X".repeat(25000)); // 25 KB
+
+  const testConvId = `conv-limit-skip-${Date.now()}`;
+  const { ContextModeStore } = await import("../lib/store.js");
+  const store = new ContextModeStore();
+
+  try {
+    // 1. Set max auto-index limit to 10 KB (below 25 KB)
+    store.setMaxAutoIndexBytes(10 * 1024, testConvId);
+
+    const result1 = await runHook(hookFile, {
+      conversationId: testConvId,
+      cwd: testDir,
+      toolCall: {
+        name: "read_file",
+        args: { Path: testFile }
+      }
+    });
+
+    assert.equal(result1.decision, "deny");
+    // Standard protection without auto-indexed
+    assert.ok(result1.reason.includes("[context-mode protection]"));
+    assert.equal(result1.reason.includes("[context-mode protection: auto-indexed]"), false);
+
+    // 2. Set auto-index to 0 (disabled)
+    store.setMaxAutoIndexBytes(0, testConvId);
+
+    const result2 = await runHook(hookFile, {
+      conversationId: testConvId,
+      cwd: testDir,
+      toolCall: {
+        name: "read_file",
+        args: { Path: testFile }
+      }
+    });
+
+    assert.equal(result2.decision, "deny");
+    assert.ok(result2.reason.includes("[context-mode protection]"));
+    assert.equal(result2.reason.includes("[context-mode protection: auto-indexed]"), false);
+  } finally {
+    store.close();
+    fs.rmSync(testDir, { recursive: true, force: true });
   }
 });

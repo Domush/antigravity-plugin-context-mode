@@ -2,6 +2,24 @@
 
 All notable changes to `antigravity-plugin-context-mode` will be documented in this file.
 
+## [1.4.0] - 2026-11-21
+
+### Added
+- **Live Active Cutoff & Exemption Injections (`SessionStart` & `PreInvocation`)**: Injected system messages dynamically report the active single-operation read cutoff and enumerate all active exempt file categories and custom extensions. Explicitly clarifies to LLM agents that the cutoff is a single-read tool threshold, not the model's context window.
+- **Mid-Session Dynamic Configuration Tracking (`PreInvocation`)**: Added `hooks/pre-invocation.js` registered under `PreInvocation` in `hooks.json`. Automatically detects when cutoff limits or file exemptions are modified mid-session (via dashboard or API) and immediately informs the agent on the subsequent turn while remaining completely quiet when unchanged.
+- **Automatic Indexing Redirection on Interception (`PreToolUse`)**: Instead of simply rejecting large `read_file` operations or un-paged file dump commands (`cat`, `Get-Content`, `type`), `PreToolUse` now automatically reads and indexes the target file into SQLite FTS5 (up to a configurable 50 MB ceiling) and returns `[context-mode protection: auto-indexed]` with the intuitive workspace-relative `sourceId` and immediate search instructions (`ctx_search(queries: [...], sourceId: "...")`).
+- **Workspace-Relative Source IDs (`resolveFileSourceId`)**: Normalized file `sourceId` generation in `lib/store.js` and `ctx_index`. Files inside the active project directory resolve to clean, intuitive relative paths (e.g. `src/utils.js`, `Logs/Editor.log`) rather than opaque hashes, making `ctx_search` queries with `sourceId` natural and effortless for LLM agents.
+- **Auto-Index Limit Dashboard Control & API**: Added a Max Auto-Index dropdown selector (`1 MB`, `5 MB`, `10 MB`, `50 MB`, `100 MB`, `Off`) directly adjacent to the Cutoff dropdown in the sidecar dashboard. Added `/api/auto-index-limit` (`GET` and `POST`) endpoint in `server.mjs`.
+- **Configurable Auto-Index Limits Cascade**: Configurable via `CONTEXT_MODE_MAX_AUTO_INDEX_BYTES` env variable, session overrides, or SQLite global setting (`store.getMaxAutoIndexBytes()` and `store.setMaxAutoIndexBytes()`).
+- **Idempotent File Re-indexing**: Re-indexing an existing file sourceId cleans up prior chunk entries before writing new ones, preventing chunk duplication when files are edited and re-indexed.
+- **Active Limit & Exemption Diagnostics in MCP Tools**: Enhanced `ctx_stats` and `ctx_doctor` to return active cutoff bytes, formatted cutoff strings, and active exempt categories/extensions.
+
+### Fixed
+- **Debunked 8 KB Context Window Hallucination in Agent Rules (`rules/AGENTS.md`)**: Updated behavioral guidelines to explicitly distinguish between the tool-level read cutoff and the model's actual context window, and instructed agents that exempt files (PDFs, images, Office documents, 3D models, audio, video, archives, and prompt attachments) bypass cutoff protection and can be read directly with `read_file` without hesitation.
+- **Dynamic PreToolUse Denial Messages**: Refactored denial messages in `hooks/pre-tool-use.js` to dynamically generate the live active exempt categories and custom extensions from SQLite rather than displaying a static hardcoded note.
+- **Double-Counting Prevention in Statistics**: Updated `getStats()` in `lib/store.js` to ensure auto-indexed files logged through `read_file` or `run_command` interceptions are not double-counted between `events` and `sources`.
+- **Safe ES Module Hook Imports**: Added `isMain` execution guards to `hooks/pre-tool-use.js` and `hooks/session-start.js` to prevent unintended top-level execution when importing helper utilities across hooks and test suites.
+
 ## [1.3.2] - 2026-11-17
 
 ### Documentation

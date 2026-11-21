@@ -86,6 +86,19 @@
           </select>
         </div>
 
+        <!-- Auto-Index Dropdown -->
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 text-[11px] text-slate-400 font-mono" title="Max file size automatically indexed on block">
+          <span id="auto-index-scope-label">Auto-Index:</span>
+          <select id="auto-index-select" onchange="changeAutoIndexLimit(this.value)" class="bg-[#181a28] text-emerald-300 font-semibold rounded px-1.5 py-0.5 border border-white/10 focus:outline-none focus:border-emerald-500 cursor-pointer">
+            <option value="1048576">1 MB</option>
+            <option value="5242880">5 MB</option>
+            <option value="10485760">10 MB</option>
+            <option value="52428800">50 MB</option>
+            <option value="104857600">100 MB</option>
+            <option value="0">Off</option>
+          </select>
+        </div>
+
         <!-- Version Badge (dynamically populated) -->
         <span id="dashboard-version" class="text-[10px] font-mono font-medium text-slate-400 bg-white/[0.04] border border-white/10 px-2 py-1 rounded-lg select-none" title="Current Context Mode Version">--</span>
         
@@ -320,6 +333,13 @@
               <span id="gate-read-cutoff" class="text-slate-400">Blocks files &gt;8 KB un-paged; requires line slices (&le;200 lines)</span>
             </div>
           </div>
+          <div class="flex items-start gap-2" title="Automatically indexes oversized files into SQLite FTS5 upon interception, eliminating manual indexing turns">
+            <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
+            <div class="leading-relaxed">
+              <strong class="font-mono text-slate-200 font-semibold">Auto-Indexing:</strong> 
+              <span id="gate-auto-index" class="text-slate-400">Auto-indexes blocked files &le;50 MB directly into Context Mode</span>
+            </div>
+          </div>
           <div class="flex items-start gap-2" title="Prevents massive terminal command outputs from flooding the context window and causing model forgetfulness">
             <span class="text-emerald-400 font-bold leading-none mt-0.5">✓</span>
             <div class="leading-relaxed">
@@ -443,6 +463,11 @@
         cutoffLabel.innerText = 'Global Cutoff:';
       }
 
+      const autoIndexLabel = document.getElementById('auto-index-scope-label');
+      if (autoIndexLabel) {
+        autoIndexLabel.innerText = scope === 'lifetime' ? 'Global Auto-Index:' : 'Auto-Index:';
+      }
+
       const scopeNote = document.getElementById('exempt-scope-note');
       if (scopeNote) {
         scopeNote.innerText = scope === 'conversation' ? 'Conversation' : (scope === 'app' ? 'Session' : 'Lifetime');
@@ -451,6 +476,7 @@
       // Update dropdown selection based on active scope
       if (cachedStats) {
         updateCutoffDropdown(cachedStats);
+        updateAutoIndexDropdown(cachedStats);
         updateExemptionsList(cachedStats);
       }
 
@@ -579,6 +605,87 @@
         refreshData(true);
       } catch (err) {
         console.error("Failed to update cutoff:", err);
+      }
+    }
+
+    function updateAutoIndexDropdown(s) {
+      const autoIndexSelect = document.getElementById('auto-index-select');
+      if (!autoIndexSelect || !s) return;
+      let activeLimit = 52428800; // 50 MB default
+      if (currentScope === 'lifetime') {
+        activeLimit = s.globalMaxAutoIndexBytes !== undefined ? s.globalMaxAutoIndexBytes : 52428800;
+      } else if (currentScope === 'app') {
+        activeLimit = s.appMaxAutoIndexBytes !== undefined ? s.appMaxAutoIndexBytes : (s.globalMaxAutoIndexBytes || 52428800);
+      } else {
+        activeLimit = s.conversationMaxAutoIndexBytes !== undefined ? s.conversationMaxAutoIndexBytes : (s.maxAutoIndexBytes || 52428800);
+      }
+
+      const targetVal = String(activeLimit);
+      let matched = false;
+      for (const opt of autoIndexSelect.options) {
+        if (opt.value === targetVal) {
+          autoIndexSelect.value = targetVal;
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) {
+        autoIndexSelect.value = targetVal === '0' ? '0' : '52428800';
+      }
+
+      const gateAutoIndex = document.getElementById('gate-auto-index');
+      if (gateAutoIndex) {
+        if (activeLimit === 0) {
+          gateAutoIndex.innerText = 'Auto-indexing disabled (prompts manual index on block)';
+        } else {
+          gateAutoIndex.innerText = `Auto-indexes blocked files ≤${formatBytes(activeLimit)} directly into Context Mode`;
+        }
+      }
+    }
+
+    async function changeAutoIndexLimit(newVal) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const convId = window.sidecar?.conversationId || params.get('conversationId') || '';
+        const limitBytes = newVal === '0' || newVal === 0 ? 0 : parseInt(newVal, 10);
+
+        // Optimistically update UI immediately
+        const autoIndexSelect = document.getElementById('auto-index-select');
+        if (autoIndexSelect) autoIndexSelect.value = String(limitBytes);
+        const gateAutoIndex = document.getElementById('gate-auto-index');
+        if (gateAutoIndex) {
+          if (limitBytes === 0) {
+            gateAutoIndex.innerText = 'Auto-indexing disabled (prompts manual index on block)';
+          } else {
+            gateAutoIndex.innerText = `Auto-indexes blocked files ≤${formatBytes(limitBytes)} directly into Context Mode`;
+          }
+        }
+        if (cachedStats) {
+          if (currentScope === 'lifetime') {
+            cachedStats.globalMaxAutoIndexBytes = limitBytes;
+            cachedStats.appMaxAutoIndexBytes = limitBytes;
+            cachedStats.conversationMaxAutoIndexBytes = limitBytes;
+            cachedStats.maxAutoIndexBytes = limitBytes;
+          } else if (currentScope === 'app') {
+            cachedStats.appMaxAutoIndexBytes = limitBytes;
+          } else {
+            cachedStats.conversationMaxAutoIndexBytes = limitBytes;
+            cachedStats.maxAutoIndexBytes = limitBytes;
+          }
+        }
+
+        const queryUrl = `/api/auto-index-limit?limit=${encodeURIComponent(limitBytes)}&scope=${encodeURIComponent(currentScope)}&conversationId=${encodeURIComponent(convId)}`;
+        const res = await apiFetch(queryUrl, { method: 'GET' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const respData = await res.json().catch(() => null);
+        if (respData && cachedStats) {
+          if (respData.globalMaxAutoIndexBytes !== undefined) cachedStats.globalMaxAutoIndexBytes = respData.globalMaxAutoIndexBytes;
+          if (respData.appMaxAutoIndexBytes !== undefined) cachedStats.appMaxAutoIndexBytes = respData.appMaxAutoIndexBytes;
+          if (respData.conversationMaxAutoIndexBytes !== undefined) cachedStats.conversationMaxAutoIndexBytes = respData.conversationMaxAutoIndexBytes;
+        }
+        refreshData(true);
+      } catch (err) {
+        console.error("Failed to update auto-index limit:", err);
       }
     }
 
@@ -792,6 +899,7 @@
 
         // Update cutoff dropdown and status
         updateCutoffDropdown(s);
+        updateAutoIndexDropdown(s);
         updateExemptionsList(s);
         if (s.isPaused !== undefined) {
           updateActiveBadge(s.isPaused);

@@ -1,10 +1,27 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { ContextModeStore } from "../lib/store.js";
+import { fileURLToPath } from "node:url";
+import { ContextModeStore, DEFAULT_MAX_AUTO_INDEX_BYTES, resolveFileSourceId } from "../lib/store.js";
 
 export const DEFAULT_MAX_READ_BYTES = 8192; // 8 KB default cutoff
 export const DEFAULT_MAX_LINE_RANGE = 200; // 200 lines max un-indexed slice
+
+export function getMaxAutoIndexBytes(sessionId = null) {
+  try {
+    const store = new ContextModeStore();
+    const limit = store.getMaxAutoIndexBytes(sessionId);
+    store.close();
+    return limit;
+  } catch {
+    const envVal = process.env.CONTEXT_MODE_MAX_AUTO_INDEX_BYTES;
+    if (envVal) {
+      const parsed = parseInt(envVal, 10);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+    return DEFAULT_MAX_AUTO_INDEX_BYTES;
+  }
+}
 
 function isProtectionPaused(sessionId = null) {
   try {
@@ -17,7 +34,7 @@ function isProtectionPaused(sessionId = null) {
   }
 }
 
-function getMaxReadBytes(sessionId = null) {
+export function getMaxReadBytes(sessionId = null) {
   try {
     const store = new ContextModeStore();
     const cutoff = store.getCutoff(sessionId);
@@ -33,7 +50,7 @@ function getMaxReadBytes(sessionId = null) {
   }
 }
 
-function getExemptExtensions(sessionId = null) {
+export function getExemptExtensions(sessionId = null) {
   try {
     const store = new ContextModeStore();
     const exts = store.getExemptExtensions(sessionId);
@@ -44,7 +61,18 @@ function getExemptExtensions(sessionId = null) {
   }
 }
 
-function getMaxLineRange(maxReadBytes = DEFAULT_MAX_READ_BYTES) {
+export function getActiveExemptSummary(sessionId = null) {
+  try {
+    const store = new ContextModeStore();
+    const summary = store.getExemptSummary(sessionId);
+    store.close();
+    return summary;
+  } catch {
+    return "prompt attachments in .user_uploaded/";
+  }
+}
+
+export function getMaxLineRange(maxReadBytes = DEFAULT_MAX_READ_BYTES) {
   const envVal = process.env.CONTEXT_MODE_MAX_LINE_RANGE;
   if (envVal) {
     const parsed = parseInt(envVal, 10);
@@ -54,7 +82,7 @@ function getMaxLineRange(maxReadBytes = DEFAULT_MAX_READ_BYTES) {
   return Math.max(50, Math.round(maxReadBytes / 40));
 }
 
-function formatBytes(bytes) {
+export function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) {
     const kb = bytes / 1024;
@@ -358,14 +386,50 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
           const stat = fs.statSync(absPath);
           // Dynamic cutoff check against active setting
           if (maxReadBytes > 0 && stat.size > maxReadBytes) {
+            const exemptSummary = getActiveExemptSummary(sessionId);
+            const maxAutoIndexBytes = getMaxAutoIndexBytes(sessionId);
+            const sourceId = resolveFileSourceId(absPath, cwd) || cleanTarget;
+
+            let isAutoIndexed = false;
+            if (maxAutoIndexBytes > 0 && stat.size <= maxAutoIndexBytes) {
+              try {
+                const store = new ContextModeStore();
+                const content = fs.readFileSync(absPath, "utf8");
+                store.indexContent({
+                  sessionId,
+                  worktree: cwd,
+                  agent: "antigravity",
+                  kind: "file",
+                  label: sourceId,
+                  sourceId,
+                  content
+                });
+                store.close();
+                isAutoIndexed = true;
+              } catch {}
+            }
+
+            let reason = "";
+            if (isAutoIndexed) {
+              reason =
+                `[context-mode protection: auto-indexed] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
+                `exceeding the active ${formatBytes(maxReadBytes)} context limit (configured tool-level read cutoff, NOT the LLM context window). ` +
+                `The file has been automatically indexed into Context Mode as source '${sourceId}'. ` +
+                `Query it directly with 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")' or append '| Select-Object -First 50' or '-Head 50'. ` +
+                `(Live exempt types never blocked: ${exemptSummary}).`;
+            } else {
+              reason =
+                `[context-mode protection] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
+                `exceeding the active ${formatBytes(maxReadBytes)} context limit (configured tool-level read cutoff, NOT the LLM context window). ` +
+                `Please use 'mcp_context-mode_ctx_execute' or append '| Select-Object -First 50' or '-Head 50'. ` +
+                `(Live exempt types never blocked: ${exemptSummary}).`;
+            }
+
             return {
               shouldDeny: true,
-              reason:
-                `[context-mode protection] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
-                `exceeding the ${formatBytes(maxReadBytes)} context limit. ` +
-                `Please use 'mcp_context-mode_ctx_execute' or append '| Select-Object -First 50' or '-Head 50'.`,
+              reason,
               size: stat.size,
-              targetPath: cleanTarget
+              targetPath: sourceId
             };
           }
 
@@ -448,10 +512,47 @@ async function main() {
 
           if (isLargeFile && isWideRange) {
             const lineInstruction = maxLineRange > 0 ? ` or provide a tight StartLine/EndLine range (<= ${maxLineRange} lines).` : "";
-            const reason =
-              `[context-mode protection] File is ${formatBytes(stat.size)} (~${Math.round(stat.size / 4).toLocaleString()} tokens), exceeding the ${formatBytes(maxReadBytes)} context limit. ` +
-              `Reading the entire file risks severe context bloat. ` +
-              `Please use 'mcp_context-mode_ctx_index(path: "${filePath}")' followed by 'mcp_context-mode_ctx_search'${lineInstruction}`;
+            const exemptSummary = getActiveExemptSummary(sessionId);
+            const maxAutoIndexBytes = getMaxAutoIndexBytes(sessionId);
+            const sourceId = resolveFileSourceId(absPath, cwd) || filePath;
+
+            let isAutoIndexed = false;
+            if (maxAutoIndexBytes > 0 && stat.size <= maxAutoIndexBytes) {
+              try {
+                const store = new ContextModeStore();
+                const content = fs.readFileSync(absPath, "utf8");
+                store.indexContent({
+                  sessionId,
+                  worktree: cwd,
+                  agent: agentName,
+                  kind: "file",
+                  label: sourceId,
+                  sourceId,
+                  content
+                });
+                store.close();
+                isAutoIndexed = true;
+              } catch {}
+            }
+
+            let reason = "";
+            if (isAutoIndexed) {
+              reason =
+                `[context-mode protection: auto-indexed] File '${sourceId}' (${formatBytes(stat.size)}, ~${Math.round(stat.size / 4).toLocaleString()} tokens) ` +
+                `exceeded the active ${formatBytes(maxReadBytes)} context limit (configured tool-level read cutoff, NOT the LLM context window). ` +
+                `The file has been automatically indexed into Context Mode as source '${sourceId}'. ` +
+                `You do not need to index it manually. Query it immediately using 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")'${lineInstruction} ` +
+                `(Live exempt types never blocked: ${exemptSummary}).`;
+            } else {
+              const ceilingNote = maxAutoIndexBytes > 0 && stat.size > maxAutoIndexBytes
+                ? ` and the ${formatBytes(maxAutoIndexBytes)} auto-indexing ceiling`
+                : "";
+              reason =
+                `[context-mode protection] File is ${formatBytes(stat.size)} (~${Math.round(stat.size / 4).toLocaleString()} tokens), exceeding the active ${formatBytes(maxReadBytes)} context limit${ceilingNote} (configured tool-level read cutoff, NOT the LLM context window). ` +
+                `Reading un-paged large code/text files risks severe context bloat. ` +
+                `Please use 'mcp_context-mode_ctx_index(path: "${filePath}")' or 'mcp_context-mode_ctx_execute'${lineInstruction} ` +
+                `(Live exempt types never blocked: ${exemptSummary}).`;
+            }
 
             // Record interception event in SQLite store so dashboard telemetry updates immediately
             recordInterception({
@@ -459,7 +560,7 @@ async function main() {
               agent: agentName,
               cwd,
               toolName,
-              path: filePath,
+              path: sourceId,
               size: stat.size,
               reason
             });
@@ -514,7 +615,15 @@ async function main() {
   process.exit(0);
 }
 
-main().catch(() => {
-  process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
-  process.exit(0);
-});
+const isMain = Boolean(
+  process.argv[1] &&
+    path.resolve(fileURLToPath(import.meta.url)).toLowerCase() ===
+      path.resolve(process.argv[1]).toLowerCase()
+);
+
+if (isMain) {
+  main().catch(() => {
+    process.stdout.write(JSON.stringify({ decision: "allow" }) + "\n");
+    process.exit(0);
+  });
+}

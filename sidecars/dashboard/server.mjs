@@ -78,6 +78,13 @@ function getStatsPayload(data, defaultConvId = "default") {
     ? stats.globalCutoffBytes
     : (scope === "app" ? stats.appCutoffBytes : stats.conversationCutoffBytes);
 
+  stats.conversationMaxAutoIndexBytes = store.getMaxAutoIndexBytes(convId);
+  stats.appMaxAutoIndexBytes = store.getMaxAutoIndexBytes("app");
+  stats.globalMaxAutoIndexBytes = store.getMaxAutoIndexBytes(null);
+  stats.maxAutoIndexBytes = scope === "lifetime"
+    ? stats.globalMaxAutoIndexBytes
+    : (scope === "app" ? stats.appMaxAutoIndexBytes : stats.conversationMaxAutoIndexBytes);
+
   stats.conversationExemptExtensions = store.getExemptExtensions(convId);
   stats.appExemptExtensions = store.getExemptExtensions("app");
   stats.globalExemptExtensions = store.getExemptExtensions(null);
@@ -162,6 +169,23 @@ if (isSidecarEnv) {
   };
   app.api("/api/cutoff", handleCutoff, "GET");
   app.api("/api/cutoff", handleCutoff, "POST");
+
+  const handleAutoIndexLimit = (data) => {
+    const { scope, targetSid, convId } = resolveTargetSession(data, app.config.conversationId);
+    const limitBytes = data.limit === "none" || data.limit === 0 || data.limit === "0" ? 0 : parseInt(data.limit, 10);
+    const saved = store.setMaxAutoIndexBytes(limitBytes, targetSid);
+    return {
+      ok: true,
+      maxAutoIndexBytes: saved,
+      scope,
+      sessionId: targetSid,
+      globalMaxAutoIndexBytes: store.getMaxAutoIndexBytes(null),
+      appMaxAutoIndexBytes: store.getMaxAutoIndexBytes("app"),
+      conversationMaxAutoIndexBytes: store.getMaxAutoIndexBytes(convId)
+    };
+  };
+  app.api("/api/auto-index-limit", handleAutoIndexLimit, "GET");
+  app.api("/api/auto-index-limit", handleAutoIndexLimit, "POST");
 
   const handleExemptions = (data) => {
     const { scope, targetSid } = resolveTargetSession(data, app.config.conversationId);
@@ -297,6 +321,42 @@ if (isSidecarEnv) {
         req.on("end", () => {
           try {
             handleCutoffReq(JSON.parse(body || "{}"));
+          } catch (e) {
+            res.writeHead(400, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: e.message }));
+          }
+        });
+      }
+      return;
+    }
+
+    if ((req.method === "GET" || req.method === "POST") && url.pathname === "/api/auto-index-limit") {
+      const handleAutoIndexReq = (data) => {
+        const { scope, targetSid, convId } = resolveTargetSession(data);
+        const limitBytes = data.limit === "none" || data.limit === 0 || data.limit === "0" ? 0 : parseInt(data.limit, 10);
+        const saved = store.setMaxAutoIndexBytes(limitBytes, targetSid);
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(
+          JSON.stringify({
+            ok: true,
+            maxAutoIndexBytes: saved,
+            scope,
+            sessionId: targetSid,
+            globalMaxAutoIndexBytes: store.getMaxAutoIndexBytes(null),
+            appMaxAutoIndexBytes: store.getMaxAutoIndexBytes("app"),
+            conversationMaxAutoIndexBytes: store.getMaxAutoIndexBytes(convId)
+          })
+        );
+      };
+      if (req.method === "GET") {
+        const data = Object.fromEntries(url.searchParams.entries());
+        handleAutoIndexReq(data);
+      } else {
+        let body = "";
+        req.on("data", (c) => (body += c));
+        req.on("end", () => {
+          try {
+            handleAutoIndexReq(JSON.parse(body || "{}"));
           } catch (e) {
             res.writeHead(400, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: e.message }));

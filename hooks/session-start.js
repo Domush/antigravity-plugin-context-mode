@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-import { ContextModeStore } from "../lib/store.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { ContextModeStore, formatExemptSummary } from "../lib/store.js";
+import { resolveSharedSessionId, formatBytes, getMaxLineRange } from "./pre-tool-use.js";
 
 function readStdin() {
   return new Promise((resolve) => {
@@ -14,21 +17,82 @@ function readStdin() {
   });
 }
 
+export function buildStatusMessage({
+  cutoff = 8192,
+  exemptCategories = [],
+  exemptExtensions = [],
+  customExtensions = [],
+  isUpdate = false
+} = {}) {
+  const cutoffFormatted =
+    cutoff === 0
+      ? "Disabled (unlimited)"
+      : `${formatBytes(cutoff)} (${cutoff.toLocaleString()} bytes)`;
+  const maxLines = getMaxLineRange(cutoff);
+
+  const exemptSummary = formatExemptSummary({
+    activeCats: exemptCategories,
+    customs: customExtensions
+  });
+
+  const prefix = isUpdate
+    ? "context-mode config update: Active configuration has been modified."
+    : "context-mode active: Tool executions are protected against context window bloat via SQLite FTS5 BM25 search and local sandboxed execution.";
+
+  const lines = [
+    prefix,
+    `• Active single-operation read cutoff: ${cutoffFormatted}. (NOTE: This is a tool read threshold to prevent bloat, NOT your LLM context window).`,
+    `• Exempt file types (NEVER blocked by context-mode; safe to read directly with read_file): ${exemptSummary}. Exempt files bypass size limits and will not be blocked.`,
+    cutoff === 0
+      ? `• Cutoff protection is currently disabled; all files may be read directly.`
+      : `• Non-exempt code/logs/text files exceeding ${formatBytes(cutoff)}: Read with line ranges (StartLine/EndLine <= ${maxLines} lines) or use ctx_execute / ctx_index / ctx_search.`
+  ];
+
+  return lines.join("\n");
+}
+
 async function main() {
-  await readStdin();
+  const rawInput = await readStdin();
+  let payload = {};
+  try {
+    if (rawInput && rawInput.trim()) {
+      payload = JSON.parse(rawInput);
+    }
+  } catch {}
+
+  const sessionId = resolveSharedSessionId(payload);
+  let cutoff = 8192;
+  let exemptCats = [];
+  let exemptExts = [];
+  let customExts = [];
 
   try {
     const store = new ContextModeStore();
     store.clearSessionOverrides();
+    cutoff = store.getCutoff(sessionId);
+    exemptCats = store.getExemptCategories(sessionId);
+    exemptExts = store.getExemptExtensions(sessionId);
+    customExts = store.getCustomExemptExtensions(sessionId);
+
+    // Save informed configuration signature for this session so PreInvocation stays in sync
+    const sig = `${cutoff}:${exemptExts.slice().sort().join(",")}`;
+    store.setMeta(`informed_config:session:${sessionId}`, sig);
     store.close();
   } catch {}
+
+  const message = buildStatusMessage({
+    cutoff,
+    exemptCategories: exemptCats,
+    exemptExtensions: exemptExts,
+    customExtensions: customExts,
+    isUpdate: false
+  });
 
   const response = {
     injectSteps: [
       {
         systemMessage: {
-          systemMessage:
-            "context-mode active: Tool executions are protected against context window bloat via SQLite FTS5 BM25 search and local sandboxed execution. For heavy logs, large files, or bulk queries, use ctx_execute or ctx_search."
+          systemMessage: message
         }
       }
     ]
@@ -37,6 +101,14 @@ async function main() {
   process.stdout.write(JSON.stringify(response) + "\n");
 }
 
-main().catch(() => {
-  process.stdout.write(JSON.stringify({}) + "\n");
-});
+const isMain = Boolean(
+  process.argv[1] &&
+    path.resolve(fileURLToPath(import.meta.url)).toLowerCase() ===
+      path.resolve(process.argv[1]).toLowerCase()
+);
+
+if (isMain) {
+  main().catch(() => {
+    process.stdout.write(JSON.stringify({}) + "\n");
+  });
+}

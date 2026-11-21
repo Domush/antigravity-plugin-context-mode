@@ -10,6 +10,27 @@ Instead of dumping megabytes of text into the conversation, Context Mode indexes
 
 ---
 
+## Active Read Cutoff vs LLM Context Window
+
+Context Mode enforces a single-operation read/command cutoff (default 8 KB, configurable per session or globally).
+
+* **Tool-Level Read Cutoff**: This threshold applies strictly to individual `read_file` calls or terminal dump commands (`cat`, `Get-Content`, `type`) on non-exempt text/code files to protect against accidental bloat.
+* **NOT the LLM Context Window**: The model retains its full, large context window capacity. Do **not** confuse the tool-level read cutoff (e.g. 8 KB) with the model's context window.
+* **Exempt File Types (Never Blocked)**:
+  - **Images & Visuals**: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.ico`, `.tiff`, `.tif`
+  - **Documents & Office**: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.csv`, `.tsv`
+  - **3D Models**: `.blend`, `.fbx`, `.obj`, `.gltf`, `.glb`, `.stl`, `.dae`, `.3ds`, `.step`, `.iges`
+  - **Audio & Video**: `.mp3`, `.wav`, `.ogg`, `.flac`, `.aac`, `.m4a`, `.mp4`, `.mov`, `.avi`, `.mkv`, `.webm`
+  - **Archives & Binaries**: `.zip`, `.tar`, `.gz`, `.7z`, `.rar`, `.wasm`, `.exe`, `.dll`, `.so`, `.dylib`, `.bin`
+  - **Prompt Attachments**: Any file in `.user_uploaded/` or attached by the user.
+  - Any custom extensions configured as exempt in the active session.
+  
+  **Exempt files completely bypass size limits and are NEVER blocked.** Always feel free to inspect exempt files directly with `read_file`.
+
+* **Automatic Indexing on Interception**: When a non-exempt file read or unpaged command dump exceeds the active cutoff, Context Mode automatically indexes files up to 50 MB (configurable) into SQLite FTS5. The denial message returns the intuitive file-path `sourceId` (e.g. `Logs/Editor.log`), enabling you to immediately search it using `ctx_search(queries: [...], sourceId: "...")` without having to run `ctx_index` first.
+
+---
+
 ## When to Use Context Mode
 
 | Task | Traditional Tool (High Bloat) | Context Mode Solution (Zero Bloat) |
@@ -67,18 +88,20 @@ Executes multiple shell commands in batch. The combined outputs are indexed and 
 ```
 
 ### 5. `ctx_stats`
-Generates a token savings report showing how many raw bytes and estimated tokens were kept out of the model's context window:
+Generates a token savings and status report showing active cutoff, exempt categories, raw bytes handled, and estimated tokens kept out of the model's context window:
 ```json
 {}
 ```
 
 ### 6. `ctx_doctor`
-Checks SQLite database health, FTS5 availability, and active runtimes.
+Checks SQLite database health, active cutoff limits, exempt categories, FTS5 availability, and active runtimes.
 
 ---
 
 ## Best Practices
 
-1. **Write focused extraction scripts**: In `ctx_execute`, print only the final data structures or count summaries rather than raw loops.
-2. **Never dump full logs**: If a log file is > 100 KB, never call `read_file` or bare `Get-Content`. Route it through `ctx_execute` or `ctx_index`.
-3. **Use Trigram for identifiers**: `ctx_search` matches code symbols, GUIDs, and file paths via trigram indexing even if English stemming does not match.
+1. **Check Active Limits & Exemptions**: At session start or anytime via `ctx_stats` or `ctx_doctor`, verify the active cutoff limit and active exemptions.
+2. **Read Exempt Media Directly**: Multimodal files (images, audio, video, PDFs, Office files, 3D models) are exempt from cutoff limits and will never be blocked by `read_file`.
+3. **Write focused extraction scripts**: In `ctx_execute`, print only the final data structures or count summaries rather than raw loops.
+4. **Never dump full logs**: If a text log file is > 100 KB, never call un-paged `read_file` or bare `Get-Content`. Route it through `ctx_execute` or `ctx_index`.
+5. **Use Trigram for identifiers**: `ctx_search` matches code symbols, GUIDs, and file paths via trigram indexing even if English stemming does not match.

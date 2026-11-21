@@ -46,11 +46,20 @@ test("Tools suite - ctx_execute, ctx_index, ctx_search, ctx_stats", async () => 
     // 4. ctx_stats
     const statsRes = await tools.ctx_stats();
     assert.ok(statsRes.report.includes("Antigravity context-mode stats"));
+    assert.ok(statsRes.report.includes("Active Read Cutoff:"));
+    assert.ok(statsRes.report.includes("Exempt Categories:"));
     assert.ok(statsRes.stats.calls >= 1);
+    assert.equal(statsRes.stats.activeCutoffBytes, 8192);
+    assert.ok(statsRes.stats.exemptCategories.includes("images"));
+    assert.ok(statsRes.stats.exemptExtensions.includes(".png"));
+    assert.ok(statsRes.stats.exemptExtensions.includes(".pdf"));
 
     // 5. ctx_doctor
     const docRes = await tools.ctx_doctor();
     assert.equal(docRes.doctor.status, "HEALTHY");
+    assert.equal(docRes.doctor.activeCutoffBytes, 8192);
+    assert.ok(docRes.doctor.exemptCategories.includes("images"));
+    assert.ok(docRes.doctor.exemptExtensionsCount > 0);
   } finally {
     store.close();
     fs.rmSync(tmpDir, { recursive: true, force: true });
