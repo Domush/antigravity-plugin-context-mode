@@ -28,24 +28,20 @@ export function buildStatusMessage({
     cutoff === 0
       ? "Disabled (unlimited)"
       : `${formatBytes(cutoff)} (${cutoff.toLocaleString()} bytes)`;
-  const maxLines = getMaxLineRange(cutoff);
 
   const exemptSummary = formatExemptSummary({
     activeCats: exemptCategories,
     customs: customExtensions
   });
 
-  const prefix = isUpdate
-    ? "context-mode config update: Active configuration has been modified."
-    : "context-mode active: Tool executions are protected against context window bloat via SQLite FTS5 BM25 search and local sandboxed execution.";
+  const header = isUpdate
+    ? "[context-mode config update]"
+    : "[context-mode active]";
 
   const lines = [
-    prefix,
-    `• Active single-operation read cutoff: ${cutoffFormatted}. (NOTE: This is a tool read threshold to prevent bloat, NOT your LLM context window).`,
-    `• Exempt file types (NEVER blocked by context-mode; safe to read directly with read_file): ${exemptSummary}. Exempt files bypass size limits and will not be blocked.`,
-    cutoff === 0
-      ? `• Cutoff protection is currently disabled; all files may be read directly.`
-      : `• Non-exempt code/logs/text files exceeding ${formatBytes(cutoff)}: Read with line ranges (StartLine/EndLine <= ${maxLines} lines) or use ctx_execute / ctx_index / ctx_search.`
+    header,
+    `• Read cutoff: ${cutoffFormatted}`,
+    `• Exempt file types: ${exemptSummary || "None"}`
   ];
 
   return lines.join("\n");

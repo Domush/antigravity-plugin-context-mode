@@ -453,10 +453,9 @@ test("SessionStart hook - injects status system message and resets session overr
     assert.ok(result.injectSteps);
     assert.equal(result.injectSteps.length, 1);
     const sysMsg = result.injectSteps[0].systemMessage.systemMessage;
-    assert.ok(sysMsg.includes("context-mode active"));
-    assert.ok(sysMsg.includes("Active single-operation read cutoff: 4 KB (4,096 bytes)"));
-    assert.ok(sysMsg.includes("NOT your LLM context window"));
-    assert.ok(sysMsg.includes("Exempt file types (NEVER blocked by context-mode"));
+    assert.ok(sysMsg.includes("[context-mode active]"));
+    assert.ok(sysMsg.includes("Read cutoff: 4 KB (4,096 bytes)"));
+    assert.ok(sysMsg.includes("Exempt file types:"));
     assert.ok(sysMsg.includes("Images"));
     assert.ok(sysMsg.includes("Documents & Office"));
     assert.ok(sysMsg.includes(".pdf"));
@@ -470,57 +469,51 @@ test("SessionStart hook - injects status system message and resets session overr
   }
 });
 
-test("PreToolUse hook - denial message dynamically reflects live exempt categories and custom extensions", async () => {
+test("PreToolUse hook - dynamically respects live exempt categories and custom extensions", async () => {
   const hookFile = path.resolve("hooks/pre-tool-use.js");
-  const tmpFile = path.join(os.tmpdir(), "dyn_exempt_test.txt");
-  fs.writeFileSync(tmpFile, "X".repeat(20000)); // 20 KB
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctxm-dyn-exempt-"));
+  const customFile = path.join(tmpDir, "data.supercustom");
+  fs.writeFileSync(customFile, "Y".repeat(20000)); // 20 KB
+
   const { ContextModeStore } = await import("../lib/store.js");
   const store = new ContextModeStore();
   const testConv = `conv-dyn-exempt-${Date.now()}`;
 
   try {
-    // 1. Initial denial contains standard active categories
+    // 1. Custom extension .supercustom is not yet exempt -> denied
     const res1 = await runHook(hookFile, {
       conversationId: testConv,
       toolCall: {
         name: "read_file",
-        args: { Path: tmpFile }
+        args: { Path: customFile }
       }
     });
     assert.equal(res1.decision, "deny");
-    assert.ok(res1.reason.includes("Live exempt types never blocked:"));
-    assert.ok(res1.reason.includes("Images"));
-    assert.ok(res1.reason.includes("Documents & Office"));
 
-    // 2. Add custom extension .supercustom
+    // 2. Add custom extension .supercustom -> now allowed
     store.addCustomExemptExtension(".supercustom", testConv);
     const res2 = await runHook(hookFile, {
       conversationId: testConv,
       toolCall: {
         name: "read_file",
-        args: { Path: tmpFile }
+        args: { Path: customFile }
       }
     });
-    assert.equal(res2.decision, "deny");
-    assert.ok(res2.reason.includes(".supercustom"));
+    assert.equal(res2.decision, "allow");
 
-    // 3. Disable images and documents categories
-    store.toggleExemptCategory("images", false, testConv);
-    store.toggleExemptCategory("documents", false, testConv);
+    // 3. Remove custom extension .supercustom -> denied again
+    store.removeCustomExemptExtension(".supercustom", testConv);
     const res3 = await runHook(hookFile, {
       conversationId: testConv,
       toolCall: {
         name: "read_file",
-        args: { Path: tmpFile }
+        args: { Path: customFile }
       }
     });
     assert.equal(res3.decision, "deny");
-    assert.ok(!res3.reason.includes("Images"));
-    assert.ok(!res3.reason.includes("Documents & Office"));
-    assert.ok(res3.reason.includes(".supercustom"));
   } finally {
     store.close();
-    if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
 
@@ -540,10 +533,9 @@ test("PreInvocation hook - announces active limit and exempt files when config c
     assert.ok(res1.injectSteps);
     assert.equal(res1.injectSteps.length, 1);
     const msg1 = res1.injectSteps[0].systemMessage.systemMessage;
-    assert.ok(msg1.includes("context-mode active"));
-    assert.ok(msg1.includes("Active single-operation read cutoff: 8 KB"));
-    assert.ok(msg1.includes("NOT your LLM context window"));
-    assert.ok(msg1.includes("Exempt file types (NEVER blocked by context-mode"));
+    assert.ok(msg1.includes("[context-mode active]"));
+    assert.ok(msg1.includes("Read cutoff: 8 KB"));
+    assert.ok(msg1.includes("Exempt file types:"));
     assert.ok(msg1.includes(".pdf"));
     assert.ok(msg1.includes(".png"));
 
@@ -561,8 +553,8 @@ test("PreInvocation hook - announces active limit and exempt files when config c
     assert.ok(res3.injectSteps);
     assert.equal(res3.injectSteps.length, 1);
     const msg3 = res3.injectSteps[0].systemMessage.systemMessage;
-    assert.ok(msg3.includes("context-mode config update"));
-    assert.ok(msg3.includes("Active single-operation read cutoff: 32 KB (32,768 bytes)"));
+    assert.ok(msg3.includes("[context-mode config update]"));
+    assert.ok(msg3.includes("Read cutoff: 32 KB (32,768 bytes)"));
 
     // 4. Invocations stay quiet after update
     const res4 = await runHook(hookFile, {

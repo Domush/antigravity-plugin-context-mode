@@ -386,7 +386,6 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
           const stat = fs.statSync(absPath);
           // Dynamic cutoff check against active setting
           if (maxReadBytes > 0 && stat.size > maxReadBytes) {
-            const exemptSummary = getActiveExemptSummary(sessionId);
             const maxAutoIndexBytes = getMaxAutoIndexBytes(sessionId);
             const sourceId = resolveFileSourceId(absPath, cwd) || cleanTarget;
 
@@ -413,16 +412,14 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
             if (isAutoIndexed) {
               reason =
                 `[context-mode protection: auto-indexed] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
-                `exceeding the active ${formatBytes(maxReadBytes)} context limit (configured tool-level read cutoff, NOT the LLM context window). ` +
-                `The file has been automatically indexed into Context Mode as source '${sourceId}'. ` +
-                `Query it directly with 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")' or append '| Select-Object -First 50' or '-Head 50'. ` +
-                `(Live exempt types never blocked: ${exemptSummary}).`;
+                `exceeding the active ${formatBytes(maxReadBytes)} context limit. ` +
+                `The file has been automatically indexed as source '${sourceId}'. ` +
+                `Query it with 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")' or append '| Select-Object -First 50' or '-Head 50'.`;
             } else {
               reason =
                 `[context-mode protection] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
-                `exceeding the active ${formatBytes(maxReadBytes)} context limit (configured tool-level read cutoff, NOT the LLM context window). ` +
-                `Please use 'mcp_context-mode_ctx_execute' or append '| Select-Object -First 50' or '-Head 50'. ` +
-                `(Live exempt types never blocked: ${exemptSummary}).`;
+                `exceeding the active ${formatBytes(maxReadBytes)} context limit. ` +
+                `Please use 'mcp_context-mode_ctx_execute' or append '| Select-Object -First 50' or '-Head 50'.`;
             }
 
             return {
@@ -512,7 +509,6 @@ async function main() {
 
           if (isLargeFile && isWideRange) {
             const lineInstruction = maxLineRange > 0 ? ` or provide a tight StartLine/EndLine range (<= ${maxLineRange} lines).` : "";
-            const exemptSummary = getActiveExemptSummary(sessionId);
             const maxAutoIndexBytes = getMaxAutoIndexBytes(sessionId);
             const sourceId = resolveFileSourceId(absPath, cwd) || filePath;
 
@@ -538,20 +534,17 @@ async function main() {
             let reason = "";
             if (isAutoIndexed) {
               reason =
-                `[context-mode protection: auto-indexed] File '${sourceId}' (${formatBytes(stat.size)}, ~${Math.round(stat.size / 4).toLocaleString()} tokens) ` +
-                `exceeded the active ${formatBytes(maxReadBytes)} context limit (configured tool-level read cutoff, NOT the LLM context window). ` +
+                `[context-mode protection: auto-indexed] File '${sourceId}' (${formatBytes(stat.size)}) ` +
+                `exceeded the active ${formatBytes(maxReadBytes)} context limit. ` +
                 `The file has been automatically indexed into Context Mode as source '${sourceId}'. ` +
-                `You do not need to index it manually. Query it immediately using 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")'${lineInstruction} ` +
-                `(Live exempt types never blocked: ${exemptSummary}).`;
+                `Query it immediately using 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")'${lineInstruction}`;
             } else {
               const ceilingNote = maxAutoIndexBytes > 0 && stat.size > maxAutoIndexBytes
                 ? ` and the ${formatBytes(maxAutoIndexBytes)} auto-indexing ceiling`
                 : "";
               reason =
-                `[context-mode protection] File is ${formatBytes(stat.size)} (~${Math.round(stat.size / 4).toLocaleString()} tokens), exceeding the active ${formatBytes(maxReadBytes)} context limit${ceilingNote} (configured tool-level read cutoff, NOT the LLM context window). ` +
-                `Reading un-paged large code/text files risks severe context bloat. ` +
-                `Please use 'mcp_context-mode_ctx_index(path: "${filePath}")' or 'mcp_context-mode_ctx_execute'${lineInstruction} ` +
-                `(Live exempt types never blocked: ${exemptSummary}).`;
+                `[context-mode protection] File is ${formatBytes(stat.size)}, exceeding the active ${formatBytes(maxReadBytes)} context limit${ceilingNote}. ` +
+                `Please use 'mcp_context-mode_ctx_index(path: "${filePath}")' or 'mcp_context-mode_ctx_execute'${lineInstruction}`;
             }
 
             // Record interception event in SQLite store so dashboard telemetry updates immediately

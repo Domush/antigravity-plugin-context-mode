@@ -16,17 +16,7 @@ Context Mode enforces a single-operation read/command cutoff (default 8 KB, conf
 
 * **Tool-Level Read Cutoff**: This threshold applies strictly to individual `read_file` calls or terminal dump commands (`cat`, `Get-Content`, `type`) on non-exempt text/code files to protect against accidental bloat.
 * **NOT the LLM Context Window**: The model retains its full, large context window capacity. Do **not** confuse the tool-level read cutoff (e.g. 8 KB) with the model's context window.
-* **Exempt File Types (Never Blocked)**:
-  - **Images & Visuals**: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, `.bmp`, `.ico`, `.tiff`, `.tif`
-  - **Documents & Office**: `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.csv`, `.tsv`
-  - **3D Models**: `.blend`, `.fbx`, `.obj`, `.gltf`, `.glb`, `.stl`, `.dae`, `.3ds`, `.step`, `.iges`
-  - **Audio & Video**: `.mp3`, `.wav`, `.ogg`, `.flac`, `.aac`, `.m4a`, `.mp4`, `.mov`, `.avi`, `.mkv`, `.webm`
-  - **Archives & Binaries**: `.zip`, `.tar`, `.gz`, `.7z`, `.rar`, `.wasm`, `.exe`, `.dll`, `.so`, `.dylib`, `.bin`
-  - **Prompt Attachments**: Any file in `.user_uploaded/` or attached by the user.
-  - Any custom extensions configured as exempt in the active session.
-  
-  **Exempt files completely bypass size limits and are NEVER blocked.** Always feel free to inspect exempt files directly with `read_file`.
-
+* **Dynamic Active Exemptions**: Active file category exemptions and custom extensions are dynamically loaded from SQLite and injected into your session by the `SessionStart` and `PreInvocation` hooks. Files matching active exemptions bypass cutoff protection. Use `ctx_stats` or `ctx_doctor` to check live exemptions at any time.
 * **Automatic Indexing on Interception**: When a non-exempt file read or unpaged command dump exceeds the active cutoff, Context Mode automatically indexes files up to 50 MB (configurable) into SQLite FTS5. The denial message returns the intuitive file-path `sourceId` (e.g. `Logs/Editor.log`), enabling you to immediately search it using `ctx_search(queries: [...], sourceId: "...")` without having to run `ctx_index` first.
 
 ---
