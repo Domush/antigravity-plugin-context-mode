@@ -17,7 +17,7 @@ Context Mode enforces a single-operation read/command cutoff (default 8 KB, conf
 * **Tool-Level Read Cutoff**: This threshold applies strictly to individual `read_file` calls or terminal dump commands (`cat`, `Get-Content`, `type`) on non-exempt text/code files to protect against accidental bloat.
 * **NOT the LLM Context Window**: The model retains its full, large context window capacity. Do **not** confuse the tool-level read cutoff (e.g. 8 KB) with the model's context window.
 * **Dynamic Active Exemptions**: Active file category exemptions and custom extensions are dynamically loaded from SQLite and injected into your session by the `SessionStart` and `PreInvocation` hooks. Files matching active exemptions bypass cutoff protection. Use `ctx_stats` or `ctx_doctor` to check live exemptions at any time.
-* **Automatic Indexing on Interception**: When a non-exempt file read or unpaged command dump exceeds the active cutoff, Context Mode automatically indexes files up to 50 MB (configurable) into SQLite FTS5. The denial message returns the intuitive file-path `sourceId` (e.g. `Logs/Editor.log`), enabling you to immediately search it using `ctx_search(queries: [...], sourceId: "...")` without having to run `ctx_index` first.
+* **Intra-File & Directory Searches (Prioritize `ctx_search`)**: Whenever you need to locate symbols, methods, config values, or error patterns in any file or directory, use `ctx_search(queries: [...], path: "path/to/target")`. If the file is unindexed or has been modified on disk, `ctx_search` automatically indexes or updates it on-demand before searching.
 
 ---
 
@@ -25,8 +25,8 @@ Context Mode enforces a single-operation read/command cutoff (default 8 KB, conf
 
 | Task | Traditional Tool (High Bloat) | Context Mode Solution (Zero Bloat) |
 | :--- | :--- | :--- |
+| **Searching code, logs, or docs** | Full un-paged `read_file` | `ctx_search(queries: ["..."], path: "path/to/target")` (JIT auto-indexed) |
 | **Analyzing build or server logs** | `run_command("Get-Content Logs/Editor.log")` | `ctx_execute(code: "...", intent: "Find compile errors in Editor.log")` |
-| **Searching huge documentation or code** | Full un-paged `read_file` | `ctx_index(path: "...")` $\rightarrow$ `ctx_search(queries: ["..."])` |
 | **Processing API JSON responses** | Fetching and dumping 5,000 JSON items | `ctx_execute(language: "javascript", code: "fetch(...)")` |
 | **Running multi-command batches** | Running 10 commands in separate tool calls | `ctx_batch(commands: [...], queries: [...])` |
 | **Session recovery & token stats** | Re-reading entire past conversation | `ctx_resume()` / `ctx_stats()` |
@@ -46,25 +46,21 @@ Executes a short script in a local sandbox (Node.js, Python, PowerShell, or Shel
 }
 ```
 
-### 2. `ctx_index`
-Indexes a local file, web URL, or raw string into SQLite FTS5 chunks:
-```json
-{
-  "path": "Documentation/Architecture.md",
-  "label": "Architecture Guide"
-}
-```
+### 2. `ctx_search` (On-Demand / JIT Search)
+Queries indexed chunks using Reciprocal Rank Fusion (Porter BM25 stemming + Trigram matching). If `path` is specified (file, directory, or URL), Context Mode checks if the target is unindexed or modified, automatically indexes it Just-In-Time, and scopes the search.
 
-### 3. `ctx_search`
-Queries indexed chunks using Reciprocal Rank Fusion (Porter BM25 stemming + Trigram matching). Returns ranked snippets:
+For log files, pass `"reverse": true` to prioritize tail-first inspection (latest errors and timestamps first):
+
 ```json
 {
-  "queries": ["NullReferenceException", "ShipMovementService"],
+  "queries": ["FATAL", "Exception"],
+  "path": "Logs/Editor.log",
+  "reverse": true,
   "limit": 5
 }
 ```
 
-### 4. `ctx_batch`
+### 3. `ctx_batch`
 Executes multiple shell commands in batch. The combined outputs are indexed and filtered by your queries:
 ```json
 {

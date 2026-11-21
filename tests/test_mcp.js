@@ -71,7 +71,7 @@ test("MCP Server - JSON-RPC stdio handshake and tools/call", async () => {
     const toolNames = listRes.result.tools.map((t) => t.name);
     assert.ok(toolNames.includes("ctx_execute"));
     assert.ok(toolNames.includes("ctx_search"));
-    assert.ok(toolNames.includes("ctx_index"));
+    assert.equal(toolNames.includes("ctx_index"), false);
 
     // 3. tools/call -> ctx_doctor
     send({

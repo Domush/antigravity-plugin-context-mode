@@ -662,9 +662,9 @@ test("PreToolUse hook - auto-indexes read_file over cutoff with workspace-relati
     assert.ok(result.reason.includes("[context-mode protection: auto-indexed]"));
     assert.ok(result.reason.includes("large_data.json"));
     assert.ok(result.reason.includes("ctx_search"));
-    assert.ok(result.reason.includes('sourceId: "large_data.json"'));
+    assert.ok(result.reason.includes('path: "large_data.json"'));
 
-    // Verify file content was actually indexed into SQLite FTS5 under sourceId
+    // Verify file content was actually indexed into SQLite FTS5 under path
     const chunks = store.getSourceChunks("large_data.json");
     assert.ok(chunks.length >= 1);
     assert.ok(chunks[0].body.includes("OrbitalTelemetry"));
@@ -672,7 +672,7 @@ test("PreToolUse hook - auto-indexes read_file over cutoff with workspace-relati
     // Verify search works immediately on the indexed content
     const searchRes = store.search({
       queries: ["supercluster-beta"],
-      sourceId: "large_data.json",
+      path: "large_data.json",
       sessionId: testConvId
     });
     assert.ok(searchRes.hits.length >= 1);

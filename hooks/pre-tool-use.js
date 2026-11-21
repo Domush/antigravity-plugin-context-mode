@@ -308,7 +308,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
         shouldDeny: true,
         reason:
           `[context-mode protection] 'git log' without a count limiter risks dumping thousands of commits into context. ` +
-          `Please specify a count (e.g. 'git log -n 10') or run inside 'mcp_context-mode_ctx_execute'.`,
+          `Please specify a count (e.g. 'git log -n 10') or run inside 'ctx_execute'.`,
         size: 32768,
         targetPath: "git log"
       };
@@ -336,7 +336,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
         shouldDeny: true,
         reason:
           `[context-mode protection] Direct curl/wget download to stdout risks flooding the context window. ` +
-          `Please use 'mcp_context-mode_ctx_execute', save to disk ('-o <file>'), or limit output (e.g. '| head -n <lines>').`,
+          `Please use 'ctx_execute', save to disk ('-o <file>'), or limit output (e.g. '| head -n <lines>').`,
         size: 32768,
         targetPath: urlMatch ? urlMatch[0] : cleanCmd
       };
@@ -366,7 +366,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
         shouldDeny: true,
         reason:
           `[context-mode protection] Wildcard file dump ('${rawTarget}') risks flooding the context window. ` +
-          `Please use 'mcp_context-mode_ctx_execute' or limit output to only the needed lines (<= ${maxLineRange} lines, e.g. '| Select-Object -First <lines>').`,
+          `Please use 'ctx_execute' or limit output to only the needed lines (<= ${maxLineRange} lines, e.g. '| Select-Object -First <lines>').`,
         size: 32768,
         targetPath: rawTarget
       };
@@ -401,8 +401,9 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
                   agent: "antigravity",
                   kind: "file",
                   label: sourceId,
-                  sourceId,
-                  content
+                  path: sourceId,
+                  content,
+                  mtime: Math.round(stat.mtimeMs)
                 });
                 store.close();
                 isAutoIndexed = true;
@@ -414,13 +415,13 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
               reason =
                 `[context-mode protection: auto-indexed] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
                 `exceeding the active ${formatBytes(maxReadBytes)} context limit. ` +
-                `The file has been automatically indexed as source '${sourceId}'. ` +
-                `Query it with 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. -Head <lines> or '| Select-Object -First <lines>').`;
+                `The file has been automatically indexed into Context Mode. ` +
+                `Query it with 'ctx_search(queries: [...], path: "${sourceId}")' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. -Head <lines> or '| Select-Object -First <lines>').`;
             } else {
               reason =
                 `[context-mode protection] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
                 `exceeding the active ${formatBytes(maxReadBytes)} context limit. ` +
-                `Please use 'mcp_context-mode_ctx_execute' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. -Head <lines> or '| Select-Object -First <lines>').`;
+                `Please use 'ctx_execute' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. -Head <lines> or '| Select-Object -First <lines>').`;
             }
 
             return {
@@ -441,7 +442,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
         shouldDeny: true,
         reason:
           `[context-mode protection] Command matches an un-paged file dump ('${rawTarget}') that could flood the context window. ` +
-          `Please use 'mcp_context-mode_ctx_execute' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. '| Select-Object -First <lines>' or '| head -n <lines>').`,
+          `Please use 'ctx_execute' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. '| Select-Object -First <lines>' or '| head -n <lines>').`,
         size: 32768,
         targetPath: cleanTarget || rawTarget
       };
@@ -524,8 +525,9 @@ async function main() {
                   agent: agentName,
                   kind: "file",
                   label: sourceId,
-                  sourceId,
-                  content
+                  path: sourceId,
+                  content,
+                  mtime: Math.round(stat.mtimeMs)
                 });
                 store.close();
                 isAutoIndexed = true;
@@ -537,15 +539,15 @@ async function main() {
               reason =
                 `[context-mode protection: auto-indexed] File '${sourceId}' (${formatBytes(stat.size)}) ` +
                 `exceeded the active ${formatBytes(maxReadBytes)} context limit. ` +
-                `The file has been automatically indexed into Context Mode as source '${sourceId}'. ` +
-                `Query it immediately using 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")'${lineInstruction}`;
+                `The file has been automatically indexed into Context Mode. ` +
+                `Query it immediately using 'ctx_search(queries: [...], path: "${sourceId}")'${lineInstruction}`;
             } else {
               const ceilingNote = maxAutoIndexBytes > 0 && stat.size > maxAutoIndexBytes
                 ? ` and the ${formatBytes(maxAutoIndexBytes)} auto-indexing ceiling`
                 : "";
               reason =
                 `[context-mode protection] File is ${formatBytes(stat.size)}, exceeding the active ${formatBytes(maxReadBytes)} context limit${ceilingNote}. ` +
-                `Please use 'mcp_context-mode_ctx_index(path: "${filePath}")' or 'mcp_context-mode_ctx_execute'${lineInstruction}`;
+                `Please use 'ctx_execute'${lineInstruction}`;
             }
 
             // Record interception event in SQLite store so dashboard telemetry updates immediately

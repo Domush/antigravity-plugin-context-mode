@@ -167,34 +167,28 @@ const TOOL_DEFINITIONS = [
     }
   },
   {
-    name: "ctx_index",
-    description: "Index a file, URL, or raw text into SQLite FTS5 for fast BM25/trigram searching.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        path: { type: "string", description: "Path to local file to index" },
-        url: { type: "string", description: "HTTP/HTTPS URL to fetch and index" },
-        content: { type: "string", description: "Raw string content to index" },
-        label: { type: "string", description: "Descriptive label for this source" }
-      }
-    }
-  },
-  {
     name: "ctx_search",
     description:
-      "Search the local SQLite FTS5 database across indexed logs, tool outputs, and documentation using Reciprocal Rank Fusion (Porter BM25 + Trigram).",
+      "Search the local SQLite FTS5 database across indexed logs, files, tool outputs, and documentation using BM25 + Trigram RRF. If path is a file, directory, or URL, it is automatically indexed Just-In-Time if unindexed or modified.",
     inputSchema: {
       type: "object",
       properties: {
         queries: { type: "array", items: { type: "string" }, description: "Search queries or tokens to match" },
-        sourceId: { type: "string", description: "Optional sourceId to restrict search" },
+        path: {
+          type: "string",
+          description: "Path to a file, directory, or URL to search (auto-indexed Just-In-Time if unindexed or changed). Omit to search active session."
+        },
         scope: {
           type: "string",
           enum: ["session", "worktree", "all"],
-          description: "Search scope (default: session)"
+          description: "Search scope when path is omitted (default: session)"
         },
         limit: { type: "integer", description: "Max number of snippets to return (default 5)" },
-        offset: { type: "integer", description: "Offset for pagination" }
+        offset: { type: "integer", description: "Offset for pagination" },
+        reverse: {
+          type: "boolean",
+          description: "Search in reverse order (tail-first), prioritizing the newest lines/entries at the end of log files (default: false)"
+        }
       },
       required: ["queries"]
     }

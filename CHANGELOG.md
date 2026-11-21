@@ -2,20 +2,30 @@
 
 All notable changes to `antigravity-plugin-context-mode` will be documented in this file.
 
-## [1.4.0] - 2026-11-21
+## [1.5.0] - 2026-11-21
 
 ### Added
+- **Just-In-Time On-Demand Indexing (`ctx_search`)**: Refactored `ctx_search` to support `path` for individual files, directory paths, and remote URLs. Unindexed or modified files are automatically checked against file modification timestamps (`mtime`) and indexed Just-In-Time before searching, returning instant, fresh hits in a single call.
+- **Reverse Search for Log Files (`reverse: true`)**: Added optional `reverse` parameter to `ctx_search` to sort search hits by chunk order in reverse (`b.ord - a.ord`). Prioritizes the latest events, errors, and fatal crashes at the end of large log files first.
+- **Snippet Centering on Search Hits**: Window search snippets around the matched query term position rather than slicing from offset 0, ensuring matching context is visible even in large chunks.
+- **Intra-File Search Priority in Agent Standards (`rules/AGENTS.md`)**: Instructs agents to always prioritize `ctx_search(queries: [...], path: "path/to/target")` for all intra-file and directory searches without manual indexing or pre-reading into context.
 - **Live Active Cutoff & Exemption Injections (`SessionStart` & `PreInvocation`)**: Injected system messages dynamically report the active single-operation read cutoff and enumerate all active exempt file categories and custom extensions. Explicitly clarifies to LLM agents that the cutoff is a single-read tool threshold, not the model's context window.
 - **Mid-Session Dynamic Configuration Tracking (`PreInvocation`)**: Added `hooks/pre-invocation.js` registered under `PreInvocation` in `hooks.json`. Automatically detects when cutoff limits or file exemptions are modified mid-session (via dashboard or API) and immediately informs the agent on the subsequent turn while remaining completely quiet when unchanged.
-- **Automatic Indexing Redirection on Interception (`PreToolUse`)**: Instead of simply rejecting large `read_file` operations or un-paged file dump commands (`cat`, `Get-Content`, `type`), `PreToolUse` now automatically reads and indexes the target file into SQLite FTS5 (up to a configurable 50 MB ceiling) and returns `[context-mode protection: auto-indexed]` with the intuitive workspace-relative `sourceId` and immediate search instructions (`ctx_search(queries: [...], sourceId: "...")`).
-- **Workspace-Relative Source IDs (`resolveFileSourceId`)**: Normalized file `sourceId` generation in `lib/store.js` and `ctx_index`. Files inside the active project directory resolve to clean, intuitive relative paths (e.g. `src/utils.js`, `Logs/Editor.log`) rather than opaque hashes, making `ctx_search` queries with `sourceId` natural and effortless for LLM agents.
+- **Automatic Indexing Redirection on Interception (`PreToolUse`)**: Instead of simply rejecting large `read_file` operations or un-paged file dump commands (`cat`, `Get-Content`, `type`), `PreToolUse` now automatically reads and indexes the target file into SQLite FTS5 (up to a configurable 50 MB ceiling) and returns `[context-mode protection: auto-indexed]` with the intuitive workspace-relative path and immediate search instructions (`ctx_search(queries: [...], path: "...")`).
 - **Auto-Index Limit Dashboard Control & API**: Added a Max Auto-Index dropdown selector (`1 MB`, `5 MB`, `10 MB`, `50 MB`, `100 MB`, `Off`) directly adjacent to the Cutoff dropdown in the sidecar dashboard. Added `/api/auto-index-limit` (`GET` and `POST`) endpoint in `server.mjs`.
 - **Configurable Auto-Index Limits Cascade**: Configurable via `CONTEXT_MODE_MAX_AUTO_INDEX_BYTES` env variable, session overrides, or SQLite global setting (`store.getMaxAutoIndexBytes()` and `store.setMaxAutoIndexBytes()`).
-- **Idempotent File Re-indexing**: Re-indexing an existing file sourceId cleans up prior chunk entries before writing new ones, preventing chunk duplication when files are edited and re-indexed.
+- **Idempotent File Re-indexing**: Re-indexing an existing file path cleans up prior chunk entries before writing new ones, preventing chunk duplication when files are edited and re-indexed.
 - **Active Limit & Exemption Diagnostics in MCP Tools**: Enhanced `ctx_stats` and `ctx_doctor` to return active cutoff bytes, formatted cutoff strings, and active exempt categories/extensions.
 
+### Removed
+- **Retired `ctx_index` Tool**: Removed `ctx_index` from MCP tool definitions, server schemas, rules, and skills. Because `ctx_search` automatically indexes files, directories, and URLs on-demand, manual indexing is completely obsolete.
+- **Eliminated `sourceId` Parameter**: Replaced internal database identifier `sourceId` across all tool schemas, denial messages, and agent instructions with standard `path`.
+- **Stripped `mcp_context-mode_` Prefix from Denial Messages**: Simplified all guidance messages so tool calls are referred to cleanly as `ctx_search` and `ctx_execute`.
+
 ### Fixed
-- **Debunked 8 KB Context Window Hallucination in Agent Rules (`rules/AGENTS.md`)**: Updated behavioral guidelines to explicitly distinguish between the tool-level read cutoff and the model's actual context window, and instructed agents that exempt files (PDFs, images, Office documents, 3D models, audio, video, archives, and prompt attachments) bypass cutoff protection and can be read directly with `read_file` without hesitation.
+- **Dynamic Maximum Line Ranges**: Replaced arbitrary hardcoded line numbers (`-First 50`, `head -n 50`) in denial messages and rules with dynamic maximum limits (`getMaxLineRange(maxReadBytes)`) and explicit instructions to read only the lines needed.
+- **Zero Redundant Instructions**: Stripped repetitive tutorial text, hardcoded exemption catalogs, and false guarantees from rules, session-start notices, and tool denial reasons.
+- **Debunked 8 KB Context Window Hallucination in Agent Rules (`rules/AGENTS.md`)**: Updated behavioral guidelines to explicitly distinguish between the tool-level read cutoff and the model's actual context window, and instructed agents that exempt files bypass cutoff protection.
 - **Dynamic PreToolUse Denial Messages**: Refactored denial messages in `hooks/pre-tool-use.js` to dynamically generate the live active exempt categories and custom extensions from SQLite rather than displaying a static hardcoded note.
 - **Double-Counting Prevention in Statistics**: Updated `getStats()` in `lib/store.js` to ensure auto-indexed files logged through `read_file` or `run_command` interceptions are not double-counted between `events` and `sources`.
 - **Safe ES Module Hook Imports**: Added `isMain` execution guards to `hooks/pre-tool-use.js` and `hooks/session-start.js` to prevent unintended top-level execution when importing helper utilities across hooks and test suites.

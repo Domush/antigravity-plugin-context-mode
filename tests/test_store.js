@@ -372,3 +372,66 @@ test("ContextModeStore - max auto-index bytes cascade and resolveFileSourceId", 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
 });
+
+test("ContextModeStore - ensurePathIndexed and search with file and directory paths Just-In-Time", () => {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ctxm-test-jit-"));
+  const dbPath = path.join(tmpDir, "test.db");
+  const store = new ContextModeStore({ dbPath });
+
+  try {
+    const sid = "test-session-jit";
+    const subDir = path.join(tmpDir, "src", "services");
+    fs.mkdirSync(subDir, { recursive: true });
+
+    // 1. Unindexed file on disk
+    const targetFile = path.join(subDir, "AuthService.ts");
+    fs.writeFileSync(targetFile, "export class AuthService { authenticateUser(token: string) { return true; } }");
+
+    // Search targeting path "src/services/AuthService.ts" before it has been explicitly indexed
+    const res1 = store.search({
+      queries: ["authenticateUser"],
+      path: "src/services/AuthService.ts",
+      sessionId: sid,
+      worktree: tmpDir
+    });
+
+    assert.ok(res1.hits.length >= 1);
+    assert.ok(res1.hits[0].snippet.includes("authenticateUser"));
+    assert.equal(res1.hits[0].path, "src/services/AuthService.ts");
+
+    // 2. Modify the file on disk (update mtime and content)
+    // Ensure mtime changes by advancing time or writing new content
+    const statBefore = fs.statSync(targetFile);
+    fs.writeFileSync(targetFile, "export class AuthService { validateMfaChallenge(code: string) { return 42; } }");
+    // Ensure mtimeMs is strictly greater
+    fs.utimesSync(targetFile, statBefore.atimeMs / 1000 + 10, statBefore.mtimeMs / 1000 + 10);
+
+    const res2 = store.search({
+      queries: ["validateMfaChallenge"],
+      path: "src/services/AuthService.ts",
+      sessionId: sid,
+      worktree: tmpDir
+    });
+
+    assert.ok(res2.hits.length >= 1);
+    assert.ok(res2.hits[0].snippet.includes("validateMfaChallenge"));
+
+    // 3. Search directory path "src/"
+    const helperFile = path.join(tmpDir, "src", "helper.ts");
+    fs.writeFileSync(helperFile, "export function superHelperToken() { return 999; }");
+
+    const resDir = store.search({
+      queries: ["superHelperToken"],
+      path: "src/",
+      sessionId: sid,
+      worktree: tmpDir
+    });
+
+    assert.ok(resDir.hits.length >= 1);
+    assert.ok(resDir.hits[0].snippet.includes("superHelperToken"));
+    assert.equal(resDir.hits[0].path, "src/helper.ts");
+  } finally {
+    store.close();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+});

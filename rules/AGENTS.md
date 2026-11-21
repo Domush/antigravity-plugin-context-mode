@@ -7,11 +7,12 @@ When `antigravity-plugin-context-mode` is active, agents MUST adhere to context 
    - It is **NOT your LLM context window**. Your LLM context window is vastly larger. Do NOT assume your context window is 8 KB.
    - Files or command outputs within the active cutoff limit can always be read directly.
 
-2. **Non-Exempt Text and Code Files & Automatic Indexing**:
-   - For non-exempt text files (code, logs, json, yaml, etc.) that exceed the active cutoff:
-     - **Automatic Indexing**: Intercepted file reads and unpaged dumps of files up to 50 MB are **automatically indexed** into Context Mode. The denial notice provides the intuitive file-path `sourceId` (e.g. `Logs/Editor.log`) so you can immediately search it via `ctx_search(queries: [...], sourceId: "...")` without needing to call `ctx_index` manually.
-     - **Line Slices**: Or read only the lines needed with `StartLine` and `EndLine` (within the active line limit).
-     - **Script Filtering**: Or inspect/filter with short scripts via `ctx_execute`.
+2. **Intra-File & Directory Searches (Prioritize `ctx_search`)**:
+   - **Always prioritize `ctx_search(queries: [...], path: "path/to/target")`** whenever you need to search for specific functions, symbols, error patterns, or text inside any file or directory.
+   - `ctx_search` automatically indexes and updates files Just-In-Time based on file modification timestamps—you do NOT need to read files into context first or run any manual indexing.
+   - **Log & Chronological Files**: When searching logs, traces, or events, pass `reverse: true` (e.g. `ctx_search(queries: ["error"], path: "Logs/app.log", reverse: true)`) to inspect the newest lines and most recent errors at the tail of the file first.
+   - **Line Slices**: Read files directly with `StartLine` and `EndLine` only when you already know the specific lines needed (within the active line limit).
+   - **Script Filtering**: Or inspect/filter with short scripts via `ctx_execute`.
 
 3. **Zero Raw Log Dumps**: Never run unbounded terminal commands (`cat`, `Get-Content`, `type`, unpaged `git log`, direct `curl`/`wget` to stdout). Pipe to limiters for only the specific lines needed (e.g. `| Select-Object -First <lines>` or `| head -n <lines>`) or run via `ctx_execute`.
 

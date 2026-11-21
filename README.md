@@ -99,13 +99,12 @@ Tested live on real-world build logs and source files in the Antigravity App:
 
 ## Available MCP Tools
 
-Once installed, Context Mode provides 8 specialized tools for your agent:
+Once installed, Context Mode provides 7 specialized tools for your agent:
 
 | Tool | What It Does |
 | :--- | :--- |
 | **`ctx_execute`** | Runs sandboxed Node.js, Python, or PowerShell scripts to inspect files and extract answers without context dumps. |
-| **`ctx_search`** | Searches indexed logs and documentation using local SQLite FTS5 BM25 stemming. |
-| **`ctx_index`** | Indexes local files or documentation into searchable chunks for the agent. |
+| **`ctx_search`** | Searches files, directories, or URLs with Just-In-Time auto-indexing using local SQLite FTS5 BM25 + Trigram RRF. |
 | **`ctx_batch`** | Runs multiple terminal commands in batch and indexes the combined output. |
 | **`ctx_stats`** | Displays a formatted context savings report and token metrics. |
 | **`ctx_resume`** | Returns recent indexed sources and state pointers after context compactions. |
