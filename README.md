@@ -10,10 +10,11 @@
 
 **Antigravity Context Mode** is a free, local-first plugin built specifically for the **Google Antigravity App**. It prevents terminal commands, build logs, and multi-megabyte source files from flooding your conversation history — saving thousands of tokens per turn and stopping "agent amnesia" in its tracks.
 
+## Major 2.0 update - Update now. See below for details
+
 > 🌐 **Interactive Live Simulator & Documentation:** [domush.github.io/antigravity-plugin-context-mode](https://domush.github.io/antigravity-plugin-context-mode/)
 
-<img width="715" height="632" alt="image" src="https://github.com/user-attachments/assets/952b84a0-3e71-4bd6-99ae-e604532c1c7f" />
-
+<img width="823" height="646" alt="image" src="https://github.com/user-attachments/assets/06998c76-1735-4c35-a727-ac41ac47803b" />
 ---
 
 ## Quick Install (10 Seconds)
