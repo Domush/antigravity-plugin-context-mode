@@ -89,6 +89,8 @@ Tested live on real-world build logs and source files in the Antigravity App:
 ## Key Features
 
 * 🛡️ **Automated Interception**: Blocks unbounded file dumps and commands before they bloat your context window.
+* 🧠 **Intelligent Language-Aware Chunking (v2.0)**: Intelligently chunks source code (JS, TS, Python, Java, C#, Go, Rust, Ruby, PHP, C/C++, Shell, SQL), Markdown, JSON, YAML, TOML, HTML/XML, and logs. Never slices methods, headings, or stack traces mid-block.
+* 🎯 **Context-Expanding Search Results**: `ctx_search` returns complete source code methods, paragraphs, or markdown sections intact, along with `startLine`, `endLine`, and enclosing scope metadata.
 * ⚡ **Thinking in Code**: Filters multi-thousand-line outputs in 50 ms via local sandboxed scripts.
 * 🔍 **Local SQLite FTS5 Search**: Indexes files and logs locally on your machine with BM25 keyword matching and trigram search.
 * 📊 **Built-In Sidecar Dashboard**: Real-time stats pane inside Antigravity showing tokens kept out of context.

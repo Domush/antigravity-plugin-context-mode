@@ -2,6 +2,36 @@
 
 All notable changes to `antigravity-plugin-context-mode` will be documented in this file.
 
+## [2.0.0] - 2026-11-21
+
+### Major Breakthrough: Intelligent Semantic Chunking & Context-Expanding Search
+
+- **Multi-Language Semantic Chunking Engine (`lib/chunker.js`)**: Replaced arbitrary newline byte-bucket slicing with an intelligent, syntax- and format-aware chunking engine that preserves logical code structures and document sections.
+  - **Programming & Scripting Languages**:
+    - **JavaScript & TypeScript / JSX / TSX**: Preserves class declarations, method boundaries, arrow functions, async declarations, JSDoc blocks, and decorators without mid-function fracturing.
+    - **Python**: Indentation-aware block parser that keeps complete classes, methods, functions, docstrings, and decorator stacks intact.
+    - **Systems & OOP Languages (Java, C#, C, C++, Go, Rust, PHP, Swift, Kotlin, Scala)**: Tracks brace depth, namespaces, annotations, struct/impl blocks, and function headers.
+    - **Shell & PowerShell**: Preserves function declarations, filter blocks, and parameter definitions.
+    - **SQL**: Statement-level chunking for DDL and queries (`CREATE TABLE`, `CREATE PROCEDURE`, `SELECT`, `ALTER`, etc.).
+  - **Markdown Documents**: Hierarchical section chunking that tracks H1–H6 header breadcrumbs (e.g. `# Architecture > ## Storage Engine > ### SQLite Schema`) and keeps fenced code blocks, tables, and list structures intact.
+  - **Structured Data & Configurations**:
+    - **JSON & JSONC / JSONL**: Chunks by top-level keys or array slices, preserving valid JSON structures and property contexts (`key: "scripts"`).
+    - **YAML**: Chunks by document dividers (`---`) and top-level key hierarchies.
+    - **TOML & INI / Config / ENV**: Keeps section blocks (`[section]`) and associated key-value pairs intact.
+  - **Web & Markup**: Tag-aware chunking for HTML, XHTML, XML, SVG, and stylesheets (CSS, SCSS, LESS).
+  - **Log Files & Stack Traces**: Intelligent event boundary detection grouping timestamps, log levels (`[INFO]`, `[ERROR]`, etc.), and multi-line exception stack traces (Java, Node, Python `at ...`, `Caused by:`) together in a single chunk.
+  - **Diffs & Patches**: Hunk-level chunking preserving unified diff headers and patch chunks.
+  - **Prose & Plain Text**: Paragraph-aware chunking snapping to double newlines and sentence boundaries.
+- **Intelligent Contextual Snippet Expansion**:
+  - When a matched chunk (method, markdown section, paragraph, or log event) fits within the generous snippet budget (default 2,048 bytes), `ctx_search` returns the **entire complete method / section / block intact** without arbitrary word or character truncation.
+  - For oversized chunks, snippets expand outward to clean line boundaries and prepend structural context headers with exact line range markers (e.g. `... [lines above omitted; showing lines 45-80 [class Service > method compute()]]`).
+- **Enhanced Search Result Metadata**:
+  - `ctx_search` hits now include `startLine`, `endLine`, `context` (e.g. `class FlightComputer > calculateOrbitalVelocity()`), `title`, and `rrfScore` for immediate structural orientation.
+- **SQLite Schema v4**:
+  - Upgraded SQLite virtual tables `chunks` and `chunks_tri` to schema v4 with unindexed `start_line`, `end_line`, and `context` columns for high-performance zero-overhead metadata storage.
+  - Seamless automatic migration from existing v2 and v3 databases.
+- **Comprehensive Unit & Integration Test Suite (`tests/test_chunker.js`)**: Added 15 new tests covering format detection, syntax chunking across all languages, snippet expansion, and end-to-end SQLite search. All 46 tests pass cleanly.
+
 ## [1.5.0] - 2026-11-21
 
 ### Added

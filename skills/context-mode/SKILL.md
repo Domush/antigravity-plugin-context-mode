@@ -47,7 +47,9 @@ Executes a short script in a local sandbox (Node.js, Python, PowerShell, or Shel
 ```
 
 ### 2. `ctx_search` (On-Demand / JIT Search)
-Queries indexed chunks using Reciprocal Rank Fusion (Porter BM25 stemming + Trigram matching). If `path` is specified (file, directory, or URL), Context Mode checks if the target is unindexed or modified, automatically indexes it Just-In-Time, and scopes the search.
+Queries indexed chunks using Reciprocal Rank Fusion (Porter BM25 stemming + Trigram matching). Files are chunked intelligently by format (preserving entire functions, markdown sections, JSON/YAML keys, and log traces intact). Hits return complete enclosing methods/sections whenever possible, along with `startLine`, `endLine`, and enclosing `context` metadata.
+
+If `path` is specified (file, directory, or URL), Context Mode checks if the target is unindexed or modified, automatically indexes it Just-In-Time, and scopes the search.
 
 For log files, pass `"reverse": true` to prioritize tail-first inspection (latest errors and timestamps first):
 

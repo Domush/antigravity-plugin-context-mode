@@ -489,12 +489,16 @@ test("ContextModeStore - automatic migration from schema v2 (id/source_id) to v3
     store.open();
 
     const version = store.getMeta("schema_version");
-    assert.equal(version, "3");
+    assert.equal(version, "4");
 
-    // Check table info for sources
+    // Check table info for sources and chunks
     const sourceCols = store.db.prepare("PRAGMA table_info(sources)").all().map((c) => c.name);
     assert.ok(sourceCols.includes("path"));
     assert.equal(sourceCols.includes("id"), false);
+
+    const chunkCols = store.db.prepare("PRAGMA table_info(chunks)").all().map((c) => c.name);
+    assert.ok(chunkCols.includes("start_line"));
+    assert.ok(chunkCols.includes("context"));
 
     // Verify index and search work on migrated database
     store.indexContent({
