@@ -10,10 +10,10 @@ When `antigravity-plugin-context-mode` is active, agents MUST adhere to context 
 2. **Non-Exempt Text and Code Files & Automatic Indexing**:
    - For non-exempt text files (code, logs, json, yaml, etc.) that exceed the active cutoff:
      - **Automatic Indexing**: Intercepted file reads and unpaged dumps of files up to 50 MB are **automatically indexed** into Context Mode. The denial notice provides the intuitive file-path `sourceId` (e.g. `Logs/Editor.log`) so you can immediately search it via `ctx_search(queries: [...], sourceId: "...")` without needing to call `ctx_index` manually.
-     - **Line Slices**: Or provide a tight line range with `StartLine` and `EndLine` (<= 200 lines).
+     - **Line Slices**: Or read only the lines needed with `StartLine` and `EndLine` (within the active line limit).
      - **Script Filtering**: Or inspect/filter with short scripts via `ctx_execute`.
 
-3. **Zero Raw Log Dumps**: Never run unbounded terminal commands (`cat`, `Get-Content`, `type`, unpaged `git log`, direct `curl`/`wget` to stdout). Pipe to limiters (e.g. `| Select-Object -First 50` or `| head -n 50`) or run via `ctx_execute`.
+3. **Zero Raw Log Dumps**: Never run unbounded terminal commands (`cat`, `Get-Content`, `type`, unpaged `git log`, direct `curl`/`wget` to stdout). Pipe to limiters for only the specific lines needed (e.g. `| Select-Object -First <lines>` or `| head -n <lines>`) or run via `ctx_execute`.
 
 4. **Token Verification & Active Status**:
    - The active cutoff limit and currently active exempt file types are dynamically announced in the session status message and on configuration changes.

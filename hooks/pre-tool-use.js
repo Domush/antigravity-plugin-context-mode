@@ -297,6 +297,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
 
   const cleanCmd = cleanStringArg(commandLine);
   const maxReadBytes = getMaxReadBytes(sessionId);
+  const maxLineRange = getMaxLineRange(maxReadBytes);
   const exemptExtensions = getExemptExtensions(sessionId);
 
   // 1. Git log without count limiter
@@ -335,7 +336,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
         shouldDeny: true,
         reason:
           `[context-mode protection] Direct curl/wget download to stdout risks flooding the context window. ` +
-          `Please use 'mcp_context-mode_ctx_execute', save to disk ('-o <file>'), or append '| head -n 50'.`,
+          `Please use 'mcp_context-mode_ctx_execute', save to disk ('-o <file>'), or limit output (e.g. '| head -n <lines>').`,
         size: 32768,
         targetPath: urlMatch ? urlMatch[0] : cleanCmd
       };
@@ -365,7 +366,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
         shouldDeny: true,
         reason:
           `[context-mode protection] Wildcard file dump ('${rawTarget}') risks flooding the context window. ` +
-          `Please use 'mcp_context-mode_ctx_execute' or append a limiter such as '| Select-Object -First 50'.`,
+          `Please use 'mcp_context-mode_ctx_execute' or limit output to only the needed lines (<= ${maxLineRange} lines, e.g. '| Select-Object -First <lines>').`,
         size: 32768,
         targetPath: rawTarget
       };
@@ -414,12 +415,12 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
                 `[context-mode protection: auto-indexed] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
                 `exceeding the active ${formatBytes(maxReadBytes)} context limit. ` +
                 `The file has been automatically indexed as source '${sourceId}'. ` +
-                `Query it with 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")' or append '| Select-Object -First 50' or '-Head 50'.`;
+                `Query it with 'mcp_context-mode_ctx_search(queries: [...], sourceId: "${sourceId}")' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. -Head <lines> or '| Select-Object -First <lines>').`;
             } else {
               reason =
                 `[context-mode protection] Command attempts an un-paged dump of '${cleanTarget}' (${formatBytes(stat.size)}), ` +
                 `exceeding the active ${formatBytes(maxReadBytes)} context limit. ` +
-                `Please use 'mcp_context-mode_ctx_execute' or append '| Select-Object -First 50' or '-Head 50'.`;
+                `Please use 'mcp_context-mode_ctx_execute' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. -Head <lines> or '| Select-Object -First <lines>').`;
             }
 
             return {
@@ -440,7 +441,7 @@ export function inspectCommand({ commandLine, cwd, sessionId }) {
         shouldDeny: true,
         reason:
           `[context-mode protection] Command matches an un-paged file dump ('${rawTarget}') that could flood the context window. ` +
-          `Please use 'mcp_context-mode_ctx_execute' or append a limiter such as '| Select-Object -First 50' or '| head -n 50'.`,
+          `Please use 'mcp_context-mode_ctx_execute' or limit output to only needed lines (<= ${maxLineRange} lines, e.g. '| Select-Object -First <lines>' or '| head -n <lines>').`,
         size: 32768,
         targetPath: cleanTarget || rawTarget
       };
@@ -508,7 +509,7 @@ async function main() {
           const isWideRange = maxLineRange > 0 && (endLine === null || (endLine - startLine) > maxLineRange);
 
           if (isLargeFile && isWideRange) {
-            const lineInstruction = maxLineRange > 0 ? ` or provide a tight StartLine/EndLine range (<= ${maxLineRange} lines).` : "";
+            const lineInstruction = maxLineRange > 0 ? ` or read only the needed lines with StartLine/EndLine (<= ${maxLineRange} lines).` : "";
             const maxAutoIndexBytes = getMaxAutoIndexBytes(sessionId);
             const sourceId = resolveFileSourceId(absPath, cwd) || filePath;
 

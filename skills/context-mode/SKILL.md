@@ -26,7 +26,7 @@ Context Mode enforces a single-operation read/command cutoff (default 8 KB, conf
 | Task | Traditional Tool (High Bloat) | Context Mode Solution (Zero Bloat) |
 | :--- | :--- | :--- |
 | **Analyzing build or server logs** | `run_command("Get-Content Logs/Editor.log")` | `ctx_execute(code: "...", intent: "Find compile errors in Editor.log")` |
-| **Searching huge documentation or code** | Full `read_file` (> 400 lines) | `ctx_index(path: "...")` $\rightarrow$ `ctx_search(queries: ["..."])` |
+| **Searching huge documentation or code** | Full un-paged `read_file` | `ctx_index(path: "...")` $\rightarrow$ `ctx_search(queries: ["..."])` |
 | **Processing API JSON responses** | Fetching and dumping 5,000 JSON items | `ctx_execute(language: "javascript", code: "fetch(...)")` |
 | **Running multi-command batches** | Running 10 commands in separate tool calls | `ctx_batch(commands: [...], queries: [...])` |
 | **Session recovery & token stats** | Re-reading entire past conversation | `ctx_resume()` / `ctx_stats()` |
