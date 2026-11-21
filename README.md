@@ -98,6 +98,22 @@ Tested live on real-world build logs and source files in the Antigravity App:
 * 📦 **Zero Dependencies**: Pure native Node.js (`node:sqlite`). No native builds, no `node-gyp`.
 
 ---
+### 📊 Release Summary Matrix
+
+| Feature / Capability | v1.4.0 | v1.5.0 | v2.0.0 |
+| :--- | :---: | :---: | :---: |
+| **Tool Read Cutoff & Hook Interception** | ✅ Dynamic line scaling | ✅ Auto-index on hook | ✅ Auto-index on hook |
+| **File Exemption Controls** | ✅ 1-click category pills | ✅ Injected into agent context | ✅ Injected into agent context |
+| **Indexing Model** | Manual (`ctx_index`) | ✅ Just-In-Time (`ctx_search`) | ✅ Just-In-Time (`ctx_search`) |
+| **MCP Tool Surface** | 8 tools (with `ctx_index`) | ✅ 7 streamlined tools | ✅ 7 streamlined tools |
+| **Log Search Strategy** | Standard | ✅ Reverse / Tail-First | ✅ Tail-First + Stack Trace Grouping |
+| **Chunking Engine** | Byte & line buckets | Byte & line buckets | ✅ **AST & Syntax-Aware Semantic Engine** |
+| **Code Structure Preservation** | Partial | Partial | ✅ **15+ Languages, Classes & Methods Intact** |
+| **Markdown Chunking** | Line-based | Line-based | ✅ **Heading Breadcrumbs (`# H1 > ## H2`)** |
+| **Search Result Snippets** | Centered window slice | Centered window slice | ✅ **Complete Intact Method (up to 2 KB)** |
+| **Search Metadata** | Score & source | Path & score | ✅ **Lines X–Y, Enclosing Scope Context** |
+| **SQLite Schema** | Schema v2 | Schema v3 (`path` PK) | ✅ **Schema v4 (Unindexed Scope Metadata)** |
+---
 
 ## Available MCP Tools
 
