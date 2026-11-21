@@ -41,9 +41,108 @@ import {
 // Pre-structured static fallback changelog data
 const BUNDLED_CHANGELOG = [
   {
+    version: '2.0.0',
+    date: '2026-11-21',
+    isLatest: true,
+    added: [
+      {
+        title: 'Multi-Language Semantic Chunking Engine (lib/chunker.js)',
+        desc: 'Replaced arbitrary newline byte-bucket slicing with an intelligent, syntax- and format-aware chunking engine. Supports 15+ programming languages (Python, JS/TS, Java, C#, Go, Rust, Ruby, PHP, C/C++, Shell/PowerShell, SQL), Markdown heading hierarchies, JSON/YAML, TOML/INI, HTML/XML, and logs. Preserves complete methods, docstrings, classes, and stack traces without mid-block slicing.'
+      },
+      {
+        title: 'Context-Expanding Search Results (ctx_search)',
+        desc: 'ctx_search delivers entire complete source code methods, paragraphs, or markdown sections intact (up to 2,048 bytes) instead of arbitrary word-chopped snippets. Larger files expand to clean line boundaries with line-range headers.'
+      },
+      {
+        title: 'Structural Line Range & Scope Metadata',
+        desc: 'Search hits now include startLine, endLine, context (e.g. class FlightController > def calculate_trajectory), title, and rrfScore for instant structural orientation.'
+      },
+      {
+        title: 'SQLite Schema v4 with Unindexed Metadata Columns',
+        desc: 'Upgraded SQLite virtual tables chunks and chunks_tri to schema v4 with unindexed start_line, end_line, and context columns with seamless automatic database migration.'
+      },
+      {
+        title: 'Comprehensive 46-Test Test Suite',
+        desc: 'Added 15 dedicated unit tests covering language detection, AST/syntax boundary preservation across all formats, and end-to-end SQLite search integration.'
+      }
+    ],
+    fixed: [
+      {
+        title: 'Log Stack Trace Grouping',
+        desc: 'Multi-line exception stack traces (Java, Node, Python at ..., Caused by:, ... 15 more) are now guaranteed to stay within the same chunk as the initiating error header.'
+      },
+      {
+        title: 'Eliminated Mid-Word Snippet Truncation',
+        desc: 'Snippet boundary snapping strictly aligns to complete lines and logical blocks, preventing broken identifiers and syntax errors.'
+      }
+    ]
+  },
+  {
+    version: '1.5.0',
+    date: '2026-11-21',
+    isLatest: false,
+    added: [
+      {
+        title: 'Just-In-Time On-Demand Auto-Indexing (ctx_search)',
+        desc: 'ctx_search now accepts file, directory, and URL paths, automatically checking file modification timestamps (mtime) and indexing on-demand in a single call.'
+      },
+      {
+        title: 'Tail-First Log Search (reverse: true)',
+        desc: 'Added reverse parameter to ctx_search to inspect chunks in reverse ordinal order, prioritizing newest errors and fatal crashes at the end of large log files first.'
+      },
+      {
+        title: 'Automatic Indexing Redirection on Interception',
+        desc: 'When read_file or cat/Get-Content is intercepted by PreToolUse, it automatically indexes the target file into SQLite FTS5 (up to 50 MB) and provides workspace-relative search instructions.'
+      },
+      {
+        title: 'SQLite Schema v3 (Normalized Path Primary Key)',
+        desc: 'Normalized path as the primary key across sources and chunks, eliminating surrogate ID generators.'
+      },
+      {
+        title: 'Live Active Cutoff & Exemption Injections (SessionStart & PreInvocation)',
+        desc: 'Injected system notices dynamically report active single-read limits and exempt file categories, updating immediately if configurations change mid-session.'
+      },
+      {
+        title: 'Auto-Index Limit Selector in Sidecar Dashboard',
+        desc: 'Interactive selector (1MB, 5MB, 10MB, 50MB, 100MB, Off) and /api/auto-index-limit endpoint.'
+      }
+    ],
+    fixed: [
+      {
+        title: 'Retired ctx_index and Surrogate sourceId',
+        desc: 'Removed obsolete ctx_index tool and surrogate sourceId identifiers in favor of unified path-based ctx_search.'
+      },
+      {
+        title: 'Double-Counting Prevention in Statistics',
+        desc: 'Refactored getStats() to ensure auto-indexed files logged through read_file or run_command interceptions are not double-counted.'
+      }
+    ]
+  },
+  {
+    version: '1.4.0',
+    date: '2026-11-18',
+    isLatest: false,
+    added: [
+      {
+        title: 'Category Exemption Group Toggles',
+        desc: 'Interactive 1-click category pills in sidecar dashboard (Images, Documents, Source Code, 3D Models, Music, Video, Archives).'
+      },
+      {
+        title: 'Custom File Extensions Manager',
+        desc: 'Dynamic addition and removal of custom user extensions (.parquet, .csv, .dump) with immediate SQLite persistence.'
+      }
+    ],
+    fixed: [
+      {
+        title: 'Subagent and Primary Agent Unified Lifecycle Hooks',
+        desc: 'PreToolUse evaluates all checks identically across both primary agents and subagents.'
+      }
+    ]
+  },
+  {
     version: '1.3.2',
     date: '2026-11-15',
-    isLatest: true,
+    isLatest: false,
     added: [
       {
         title: 'Subagent & Primary Agent Unified Lifecycle Hooks',
@@ -252,7 +351,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Live Dynamic Plugin Metadata
-  const [latestVersion, setLatestVersion] = useState('1.3.2');
+  const [latestVersion, setLatestVersion] = useState('2.0.0');
   const [isLiveVersion, setIsLiveVersion] = useState(false);
   const [changelogData, setChangelogData] = useState(BUNDLED_CHANGELOG);
 
@@ -531,7 +630,7 @@ File: src/api/auth.ts:44
       .filter((r) => r.hasMatches);
   }, [changelogData, changelogSearch, changelogFilterType]);
 
-  // MCP Tools catalog
+  // MCP Tools catalog (7 specialized tools)
   const mcpTools = [
     {
       id: 'ctx_execute',
@@ -541,15 +640,15 @@ File: src/api/auth.ts:44
       whenToUse: 'When an agent needs to inspect a large JSON payload, filter build errors, or slice logs without loading raw data.',
       params: [
         { name: 'code', type: 'string', required: true, desc: 'Script code to execute' },
-        { name: 'runtime', type: "'node' | 'python' | 'powershell'", required: true, desc: 'Runtime environment' },
-        { name: 'timeoutMs', type: 'number', required: false, desc: 'Max time before SIGKILL (default 30000ms)' }
+        { name: 'language', type: "'node' | 'python' | 'powershell' | 'shell'", required: false, desc: 'Runtime environment (default: shell)' },
+        { name: 'intent', type: 'string', required: false, desc: 'Description of what the script accomplishes' }
       ],
       exampleSnippet: `// Example agent call to inspect a 200MB JSON response
 const res = await call_mcp_tool({
   ServerName: "antigravity-plugin-context-mode_context-mode",
   ToolName: "ctx_execute",
   Arguments: {
-    runtime: "node",
+    language: "node",
     code: \`
       const fs = require('fs');
       const data = JSON.parse(fs.readFileSync('output.json', 'utf8'));
@@ -562,60 +661,43 @@ const res = await call_mcp_tool({
     {
       id: 'ctx_search',
       name: 'ctx_search',
-      tag: 'Search & RRF',
-      summary: 'Queries SQLite FTS5 using BM25 stemming and Trigram matching with Reciprocal Rank Fusion.',
-      whenToUse: 'When searching through historical test runs, large documentation files, or server error logs for exact tokens.',
+      tag: 'Search & JIT Index',
+      summary: 'Searches SQLite FTS5 using BM25 stemming & Trigram RRF with language-aware semantic chunking and JIT auto-indexing.',
+      whenToUse: 'When locating functions, symbols, configs, or errors in any file, directory, or URL. Automatically indexes on-demand and returns complete methods intact.',
       params: [
-        { name: 'query', type: 'string', required: true, desc: 'Keywords or exact phrases' },
-        { name: 'limit', type: 'number', required: false, desc: 'Max ranked chunks to return (default: 5)' },
-        { name: 'threshold', type: 'number', required: false, desc: 'Min score cutoff' }
+        { name: 'queries', type: 'string[]', required: true, desc: 'Keywords, exact phrases, or identifiers' },
+        { name: 'path', type: 'string', required: false, desc: 'File, directory, or URL (auto-indexes on-demand based on mtime)' },
+        { name: 'reverse', type: 'boolean', required: false, desc: 'Tail-first inspection for logs (newest errors first)' },
+        { name: 'limit', type: 'number', required: false, desc: 'Max ranked chunks to return (default: 5)' }
       ],
-      exampleSnippet: `// Search across 350 indexed logs or a 15,000-file monorepo
+      exampleSnippet: `// Search across files or logs with JIT auto-indexing and intact methods
 const res = await call_mcp_tool({
   ServerName: "antigravity-plugin-context-mode_context-mode",
   ToolName: "ctx_search",
   Arguments: {
-    query: "502 Bad Gateway upstream timed out",
-    limit: 3
+    queries: ["computeDeltaV"],
+    path: "src/navigation.js"
   }
-});`
-    },
-    {
-      id: 'ctx_index',
-      name: 'ctx_index',
-      tag: 'Ingestion',
-      summary: 'Indexes local files, web URLs, or text chunks into local SQLite FTS5 database.',
-      whenToUse: 'Index 1,000+ line specification docs, architecture diagrams, or previous command outputs.',
-      params: [
-        { name: 'pathOrUrl', type: 'string', required: true, desc: 'Local file path or web URL' },
-        { name: 'chunkSize', type: 'number', required: false, desc: 'Tokens per chunk (default 500)' }
-      ],
-      exampleSnippet: `// Index an entire repository or large documentation
-const res = await call_mcp_tool({
-  ServerName: "antigravity-plugin-context-mode_context-mode",
-  ToolName: "ctx_index",
-  Arguments: {
-    pathOrUrl: "./packages/auth/complete-spec.md",
-    chunkSize: 400
-  }
-});`
+});
+// Hits return: { startLine: 12, endLine: 24, context: "class NavigationService > computeDeltaV", snippet: "..." }`
     },
     {
       id: 'ctx_batch',
       name: 'ctx_batch',
       tag: 'Batching',
-      summary: 'Runs multiple shell commands in batch and indexes the combined output.',
+      summary: 'Runs multiple shell commands in batch and indexes the combined output into SQLite FTS5.',
       whenToUse: 'Run git status, git log -n 5, and npm test simultaneously, indexing results without prompt flooding.',
       params: [
         { name: 'commands', type: 'string[]', required: true, desc: 'Array of shell commands to execute' },
-        { name: 'indexOutput', type: 'boolean', required: false, desc: 'Whether to push output to SQLite' }
+        { name: 'queries', type: 'string[]', required: false, desc: 'Optional queries to filter batch output' }
       ],
       exampleSnippet: `// Batch triage commands
 const res = await call_mcp_tool({
   ServerName: "antigravity-plugin-context-mode_context-mode",
   ToolName: "ctx_batch",
   Arguments: {
-    commands: ["git status --short", "git branch -v", "npm test -- --reporter=tap"]
+    commands: ["git status --short", "git branch -v", "npm test"],
+    queries: ["failing", "error"]
   }
 });`
     },
@@ -682,44 +764,61 @@ const res = await call_mcp_tool({
     }
   ];
 
-  // Search Inspector Mock Data with multi-log and monorepo matches
+  // Search Inspector Mock Data with multi-log and monorepo matches (v2.0 Intact Chunks)
   const searchResults = useMemo(() => {
     const q = searchTerm.toLowerCase().trim();
     const mockDb = [
       {
         id: 1,
-        source: '/var/log/nginx/access.2026-11-16.log',
-        category: 'logs',
-        line: 3842110,
-        score: 29.2,
-        matchType: 'BM25 Exact (350 Logs Cluster)',
-        content: '[2026-11-16 03:22:41] POST /api/v2/checkout HTTP/1.1 502 Bad Gateway upstream timed out (110: Connection timed out)',
-        context: 'Log Cluster Search: Upstream 10.0.12.88:8080 timeout across 350 rotating server logs'
+        source: 'services/navigation.ts',
+        category: 'code',
+        startLine: 24,
+        endLine: 38,
+        line: 24,
+        score: 31.5,
+        matchType: 'Intact Method (v2.0 Chunker)',
+        content: `  public async computeOrbitalDeltaV(burnTimeSeconds: number): Promise<number> {
+    const thrustNewtons = 450000;
+    const massKg = 25000;
+    const acceleration = thrustNewtons / massKg;
+    return acceleration * burnTimeSeconds;
+  }`,
+        context: 'class NavigationService > computeOrbitalDeltaV()'
       },
       {
         id: 2,
-        source: 'packages/billing/src/session.ts',
-        category: 'code',
-        line: 42,
-        score: 28.1,
-        matchType: 'Trigram Match (15,000 Files Monorepo)',
-        content: 'const authResult = await deprecatedVerifyToken(token, { bypassMfa: false });',
-        context: 'Monorepo Audit: Call site in billing microservice module'
+        source: '/var/log/nginx/access.2026-11-21.log',
+        category: 'logs',
+        startLine: 3842,
+        endLine: 3844,
+        line: 3842,
+        score: 29.2,
+        matchType: 'BM25 Exact (350 Logs Cluster)',
+        content: '[2026-11-21 03:22:41] POST /api/v2/checkout HTTP/1.1 502 Bad Gateway upstream timed out (110: Connection timed out)',
+        context: 'Log Cluster Search: Upstream 10.0.12.88:8080 timeout across 350 rotating server logs'
       },
       {
         id: 3,
-        source: 'services/gateway/src/middleware/auth.ts',
+        source: 'packages/billing/src/session.ts',
         category: 'code',
-        line: 188,
-        score: 24.5,
-        matchType: 'BM25 Stemmed (15,000 Files Monorepo)',
-        content: 'const session = await deprecatedVerifyToken(headerToken, { enforceExpiry: true });',
-        context: 'Monorepo Audit: Call site in API Gateway edge middleware'
+        startLine: 35,
+        endLine: 49,
+        line: 42,
+        score: 28.1,
+        matchType: 'Trigram Match (15,000 Files Monorepo)',
+        content: `  async verifyTokenWithFallback(token: string) {
+    // Audit site: deprecated token validation
+    const authResult = await deprecatedVerifyToken(token, { bypassMfa: false });
+    return authResult.valid;
+  }`,
+        context: 'class SessionManager > verifyTokenWithFallback()'
       },
       {
         id: 4,
         source: 'crash_dump.dmp',
         category: 'logs',
+        startLine: 1842010,
+        endLine: 1842018,
         line: 1842010,
         score: 26.4,
         matchType: 'BM25 Exact + Trigram',
@@ -730,21 +829,35 @@ const res = await call_mcp_tool({
         id: 5,
         source: 'Logs/Editor.log',
         category: 'logs',
+        startLine: 410,
+        endLine: 425,
         line: 412,
-        score: 19.8,
-        matchType: 'BM25 Exact + Trigram',
-        content: '[2026-11-15 18:23:45.912] [FATAL] NullPointerException: RenderTargetBuffer is uninitialized at Line 412',
-        context: 'Vulkan pipeline initialization failed while binding swapchain framebuffers'
+        score: 22.8,
+        matchType: 'Grouped Error & Stack Trace',
+        content: `[2026-11-21 12:00:30] [FATAL] NullPointerException: RenderTargetBuffer is uninitialized at Line 412
+    at VulkanPipeline.bindSwapchain (/engine/vulkan_pipeline.cc:412:12)
+    at RenderLoop.renderFrame (/engine/render_loop.cc:184:5)
+    Caused by: FramebufferBindingException: Swapchain image count mismatch`,
+        context: '[FATAL] NullPointerException: RenderTargetBuffer is uninitialized'
       },
       {
         id: 6,
-        source: 'src/engine/vulkan_pipeline.cc',
+        source: 'docs/architecture.md',
         category: 'code',
-        line: 412,
-        score: 16.4,
-        matchType: 'BM25 Stemmed',
-        content: 'if (!this->renderTargetBuffer) { throw NullPointerException("RenderTargetBuffer is uninitialized"); }',
-        context: 'Subsystem: Vulkan backend framebuffer allocator'
+        startLine: 45,
+        endLine: 62,
+        line: 45,
+        score: 21.4,
+        matchType: 'Intact Markdown Section',
+        content: `### SQLite Virtual Tables
+
+Using FTS5 virtual tables with trigram tokenizers for sub-token matching.
+
+| Table | Tokenizer | UNINDEXED Columns |
+| :--- | :--- | :--- |
+| chunks | porter unicode61 | start_line, end_line, context |
+| chunks_tri | trigram | start_line, end_line, context |`,
+        context: '# Architecture > ## Storage Engine > ### SQLite Virtual Tables'
       }
     ];
 
@@ -775,6 +888,18 @@ const res = await call_mcp_tool({
   };
 
   const faqs = [
+    {
+      q: 'How does intelligent content chunking work in v2.0?',
+      a: 'In v2.0, chunking is syntax- and language-aware. Rather than splitting on arbitrary byte or line buckets, Context Mode uses dedicated parsers for 15+ programming languages (Python, TypeScript, JS, Java, C#, Go, Rust, Ruby, PHP, C++, Shell, SQL), Markdown, JSON, YAML, TOML, and logs. It keeps complete functions, classes, markdown sections, and multi-line stack traces intact without mid-statement fracturing.'
+    },
+    {
+      q: 'How do search results provide contextual information without truncation in v2.0?',
+      a: 'ctx_search returns complete source code methods, paragraphs, or markdown sections whenever possible (up to 2,048 bytes) instead of chopped snippet fragments. It also includes startLine, endLine, and context (enclosing scope e.g. class FlightComputer > calculateTrajectory()) so the model immediately understands the code structure.'
+    },
+    {
+      q: 'How does Just-In-Time (JIT) auto-indexing work with ctx_search?',
+      a: 'Whenever an agent or user invokes ctx_search(queries: [...], path: "path/to/target"), Context Mode inspects the target file or directory modification timestamp (mtime). If unindexed or changed on disk, it automatically indexes it Just-In-Time before running the BM25 + Trigram search, eliminating any need for manual indexing commands.'
+    },
     {
       q: 'Does Antigravity Context Mode send any files or prompt data over the internet?',
       a: 'No, absolutely never. Context Mode is 100% local-first. All indexing is performed locally inside your home directory (~/.context-mode/context.db) using Node.js’s native SQLite engine (DatabaseSync). Zero telemetry, zero external APIs, zero network round-trips.'
@@ -810,8 +935,9 @@ const res = await call_mcp_tool({
       {/* Top Announcement Banner with Dynamic Live Version */}
       <div className="bg-gradient-to-r from-emerald-950/80 via-slate-900 to-cyan-950/80 border-b border-emerald-500/20 py-2 px-4 text-center text-xs sm:text-sm font-mono text-emerald-300 flex items-center justify-center gap-2">
         <Sparkles className="w-4 h-4 text-emerald-400 animate-pulse shrink-0" />
-        <span>Install in 1-Click with npx:</span>
-        <code className="bg-emerald-500/10 px-2 py-0.5 rounded text-emerald-200 border border-emerald-500/30 flex items-center gap-1.5">
+        <span className="font-semibold text-white">v2.0.0 Released:</span>
+        <span className="hidden sm:inline">Multi-Language Semantic Chunking & Intact Method Search!</span>
+        <code className="bg-emerald-500/10 px-2 py-0.5 rounded text-emerald-200 border border-emerald-500/30 flex items-center gap-1.5 ml-1">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
           npx antigravity-plugin-context-mode install
         </code>
@@ -874,7 +1000,7 @@ const res = await call_mcp_tool({
               onClick={() => navigateTo('home', 'mcp-tools')}
               className="hover:text-emerald-400 transition-colors whitespace-nowrap"
             >
-              8 MCP Tools
+              7 MCP Tools
             </button>
             <button
               onClick={() => navigateTo('changelog')}
@@ -935,7 +1061,7 @@ const res = await call_mcp_tool({
               onClick={() => navigateTo('home', 'mcp-tools')}
               className="block w-full text-left text-slate-300 hover:text-emerald-400"
             >
-              8 MCP Tools
+              7 MCP Tools
             </button>
             <button
               onClick={() => navigateTo('changelog')}
@@ -1277,7 +1403,7 @@ const res = await call_mcp_tool({
                     <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">MCP Protocol</span>
                     <Server className="w-4 h-4 text-cyan-400" />
                   </div>
-                  <div className="text-3xl font-extrabold text-white">8 Tools</div>
+                  <div className="text-3xl font-extrabold text-white">7 Tools</div>
                   <p className="text-xs text-slate-400 mt-1">Native JSON-RPC tool integrations</p>
                 </div>
               </div>
@@ -1750,31 +1876,31 @@ const res = await call_mcp_tool({
                 </p>
               </div>
 
-              {/* 3 Step Pipeline Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+              {/* 4 Step Pipeline Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
                 <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-emerald-500/50 transition-colors duration-200 relative group">
                   <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-mono font-bold mb-4">
                     01
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">Pre-Tool-Use Lifecycle Hook</h3>
+                  <h3 className="text-lg font-semibold text-white mb-2">Pre-Tool Hook & JIT Auto-Indexing</h3>
                   <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                    Before an agent runs an unbounded shell command (<code className="text-slate-300">cat</code>, <code className="text-slate-300">Get-Content</code>) or reads a file over 8 KB, <code className="text-emerald-400">hooks.json</code> intercepts the call.
+                    Intercepts unbounded reads (&gt;8 KB) and unpaged shell commands before prompt bloat. Files and logs up to 50 MB auto-index Just-In-Time on disk change.
                   </p>
                   <div className="mt-4 pt-4 border-t border-slate-800 text-xs font-mono text-slate-500">
-                    Gate: Enforces 8 KB cutoff & dynamic line slices.
+                    Hook Gate: Enforces cutoff & auto-indexes JIT.
                   </div>
                 </div>
 
-                <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-emerald-500/50 transition-colors duration-200 relative group">
+                <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-cyan-500/50 transition-colors duration-200 relative group">
                   <div className="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-mono font-bold mb-4">
                     02
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">"Thinking in Code" Sandboxing</h3>
+                  <h3 className="text-lg font-semibold text-white mb-2">Multi-Language Semantic Chunking</h3>
                   <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                    Instead of dumping multi-megabyte payloads, the agent executes targeted filtering scripts inside a sandboxed subprocess via <code className="text-cyan-400">ctx_execute</code>.
+                    v2.0 engine parses 15+ languages, Markdown, JSON, YAML, TOML, and logs. Keeps entire methods, classes, and stack traces intact without arbitrary byte cuts.
                   </p>
                   <div className="mt-4 pt-4 border-t border-slate-800 text-xs font-mono text-slate-500">
-                    Runtimes: Node.js, Python, or PowerShell.
+                    Chunker: Syntax- & scope-aware boundary splits.
                   </div>
                 </div>
 
@@ -1782,12 +1908,25 @@ const res = await call_mcp_tool({
                   <div className="w-10 h-10 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-mono font-bold mb-4">
                     03
                   </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">SQLite FTS5 + BM25 & Trigram RRF</h3>
+                  <h3 className="text-lg font-semibold text-white mb-2">SQLite FTS5 Schema v4 (BM25 + Trigram)</h3>
                   <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-                    Source files and logs are indexed locally in SQLite. Queries use Porter BM25 stemming combined with Trigram sub-token matching, ranked via Reciprocal Rank Fusion.
+                    Dual virtual tables with Porter BM25 stemming and trigram sub-token matching, fused via Reciprocal Rank Fusion (RRF) with zero external compilation dependencies.
                   </p>
                   <div className="mt-4 pt-4 border-t border-slate-800 text-xs font-mono text-slate-500">
-                    Storage: 100% local database with WAL mode.
+                    Engine: Native Node.js DatabaseSync (Schema v4).
+                  </div>
+                </div>
+
+                <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-6 backdrop-blur-sm hover:border-cyan-500/50 transition-colors duration-200 relative group">
+                  <div className="w-10 h-10 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 font-mono font-bold mb-4">
+                    04
+                  </div>
+                  <h3 className="text-lg font-semibold text-white mb-2">Context-Rich Snippet Delivery</h3>
+                  <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
+                    Search results return complete methods, markdown sections, or log blocks (up to 2 KB) with line numbers (Lines X–Y) and enclosing scope context.
+                  </p>
+                  <div className="mt-4 pt-4 border-t border-slate-800 text-xs font-mono text-slate-500">
+                    Output: Intact source snippets with line ranges.
                   </div>
                 </div>
               </div>
@@ -1881,7 +2020,11 @@ const res = await call_mcp_tool({
                               #{idx + 1}
                             </span>
                             <span className="text-white font-semibold truncate">{item.source}</span>
-                            <span className="text-slate-500">Line {item.line.toLocaleString()}</span>
+                            <span className="text-slate-500">
+                              {item.startLine && item.endLine
+                                ? `Lines ${item.startLine.toLocaleString()}–${item.endLine.toLocaleString()}`
+                                : `Line ${item.line.toLocaleString()}`}
+                            </span>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded text-[11px]">
@@ -1909,7 +2052,7 @@ const res = await call_mcp_tool({
             </div>
           </section>
 
-          {/* The 8 Available MCP Tools Explorer */}
+          {/* The 7 Available MCP Tools Explorer */}
           <section id="mcp-tools" className="py-16 sm:py-24 border-t border-slate-900 bg-slate-950/90">
             <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
               <div className="text-center max-w-3xl mx-auto mb-16">
@@ -1918,10 +2061,10 @@ const res = await call_mcp_tool({
                   Native Agent Protocol
                 </div>
                 <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-                  The 8 Dedicated MCP Tools
+                  The 7 Dedicated MCP Tools
                 </h2>
                 <p className="text-slate-400 text-sm sm:text-base mt-2">
-                  Context Mode registers 8 lazy-loaded Model Context Protocol tools for search, sandboxing, session recovery, and stats.
+                  Context Mode registers 7 lazy-loaded Model Context Protocol tools for search, sandboxing, session recovery, and stats.
                 </p>
               </div>
 
