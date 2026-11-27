@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "context-mode": {
+    "ctx": {
       "command": "node",
       "args": ["./server.js"]
     }

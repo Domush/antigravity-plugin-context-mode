@@ -2,6 +2,13 @@
 
 All notable changes to `antigravity-plugin-context-mode` will be documented in this file.
 
+## [2.0.1] - 2026-11-27
+
+### Improved
+- **Automated Release Notes**: Updated the GitHub Actions release workflow to automatically extract and publish the matching `CHANGELOG.md` entry for each tagged release.
+- **Streamlined Plugin Identity & Tool Grouping**: Simplified the plugin identifier and tool group so tool headers display cleanly as `context-mode_ctx` and install directly into `~/.gemini/config/plugins/context-mode` (or `.gemini/plugins/context-mode` for workspace installs).
+- **Structured Markdown Tool Outputs**: Formatted all Context Mode tool responses as clean, easy-to-scan Markdown with clear headings, metadata summaries, tables, and safe code blocks.
+
 ## [2.0.0] - 2026-11-21
 
 ### Major Breakthrough: Intelligent Semantic Chunking & Context-Expanding Search

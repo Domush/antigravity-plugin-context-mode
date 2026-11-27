@@ -1,7 +1,8 @@
 {
   "name": "antigravity-plugin-context-mode",
-  "version": "2.0.0",
-  "description": "Native Antigravity plugin for context-mode: SQLite FTS5 indexing, sandboxed execution, and lifecycle hook protection against context window bloat",
+  "displayName": "Context Mode: A plugin for Google Antigravity App",
+  "version": "2.0.1",
+  "description": "Token saving plugin for Google Antigravity App: Stop context bloat. Save 90%+ of your prompt tokens. Keep your agent fast, focused, and sharp",
   "type": "module",
   "license": "MIT",
   "author": "Phillip Webber <github@webbsense.com>",
@@ -31,7 +32,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node --test tests/test_store.js tests/test_executor.js tests/test_tools.js tests/test_hooks.js tests/test_mcp.js tests/test_chunker.js"
+    "test": "node --test tests/test_store.js tests/test_executor.js tests/test_tools.js tests/test_hooks.js tests/test_mcp.js tests/test_chunker.js tests/test_format.js tests/test_cli.js"
   },
   "bin": {
     "antigravity-context-mode": "server.js"
@@ -47,6 +48,7 @@
     "skills",
     "rules",
     "assets",
+    "sidecars",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"

@@ -1,8 +1,8 @@
 {
-  "name": "antigravity-plugin-context-mode",
+  "name": "context-mode",
   "displayName": "Context Mode",
   "description": "Context window protection for Antigravity: local SQLite FTS5 search, sandboxed execution, and lifecycle hook gating against token bloat.",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "author": "Phillip Webber <github@webbsense.com>",
   "repository": {
     "type": "git",

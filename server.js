@@ -1,113 +1,18 @@
 #!/usr/bin/env node
-import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
 import { fileURLToPath } from "node:url";
 import { ContextModeStore } from "./lib/store.js";
 import { createTools } from "./lib/tools.js";
+import { formatToolResultMarkdown } from "./lib/format.js";
+import { loadPackageVersion, runCli } from "./lib/cli.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-let pkgVersion = "1.0.0";
-try {
-  const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8"));
-  if (pkg.version) pkgVersion = pkg.version;
-} catch {}
+const pkgVersion = loadPackageVersion(__dirname);
 
-// Handle CLI subcommands (e.g. npx antigravity-plugin-context-mode install)
-const cliArg = process.argv[2];
-if (
-  cliArg === "install" ||
-  cliArg === "uninstall" ||
-  cliArg === "--help" ||
-  cliArg === "-h" ||
-  cliArg === "--version" ||
-  cliArg === "-v"
-) {
-  if (cliArg === "--version" || cliArg === "-v") {
-    console.log(`antigravity-plugin-context-mode v${pkgVersion}`);
-    process.exit(0);
-  }
-
-  if (cliArg === "--help" || cliArg === "-h") {
-    console.log(`
-Antigravity Context Mode CLI (v${pkgVersion})
-
-Usage:
-  npx antigravity-plugin-context-mode install [options]     Install plugin into Google Antigravity
-  npx antigravity-plugin-context-mode uninstall [options]   Remove installed plugin
-  npx antigravity-plugin-context-mode                      Start MCP stdio JSON-RPC server
-
-Options:
-  --global, -g     Install globally in ~/.gemini/config/plugins/ (default)
-  --workspace, -w  Install in current workspace (.gemini/plugins/antigravity-plugin-context-mode)
-`);
-    process.exit(0);
-  }
-
-  const isWorkspace = process.argv.includes("--workspace") || process.argv.includes("-w");
-  const homeDir = process.env.USERPROFILE || process.env.HOME || "";
-
-  let targetDir = "";
-  if (isWorkspace) {
-    targetDir = path.join(process.cwd(), ".gemini", "plugins", "antigravity-plugin-context-mode");
-  } else {
-    targetDir = path.join(homeDir, ".gemini", "config", "plugins", "antigravity-plugin-context-mode");
-  }
-
-  if (cliArg === "uninstall") {
-    if (fs.existsSync(targetDir)) {
-      fs.rmSync(targetDir, { recursive: true, force: true });
-      console.log(`\n✔ Antigravity Context Mode successfully removed from:`);
-      console.log(`  ${targetDir}\n`);
-    } else {
-      console.log(`\nℹ Plugin not found at: ${targetDir}\n`);
-    }
-    process.exit(0);
-  }
-
-  if (cliArg === "install") {
-    console.log(`\n📦 Installing Antigravity Context Mode v${pkgVersion}...`);
-    try {
-      fs.mkdirSync(targetDir, { recursive: true });
-
-      const filesToCopy = [
-        "plugin.json",
-        "hooks.json",
-        "mcp_config.json",
-        "server.js",
-        "package.json",
-        "README.md",
-        "LICENSE",
-        "CHANGELOG.md"
-      ];
-
-      const dirsToCopy = ["lib", "hooks", "skills", "rules", "assets"];
-
-      for (const file of filesToCopy) {
-        const src = path.join(__dirname, file);
-        const dest = path.join(targetDir, file);
-        if (fs.existsSync(src)) {
-          fs.copyFileSync(src, dest);
-        }
-      }
-
-      for (const dir of dirsToCopy) {
-        const srcDir = path.join(__dirname, dir);
-        const destDir = path.join(targetDir, dir);
-        if (fs.existsSync(srcDir)) {
-          fs.cpSync(srcDir, destDir, { recursive: true });
-        }
-      }
-
-      console.log(`\n✨ Installation complete!`);
-      console.log(`📍 Location: ${targetDir}`);
-      console.log(`🚀 Restart or open the Google Antigravity App to activate Context Mode.\n`);
-    } catch (err) {
-      console.error(`\n❌ Installation failed: ${err.message}\n`);
-      process.exit(1);
-    }
-    process.exit(0);
-  }
+const cliResult = runCli({ rootDir: __dirname });
+if (cliResult.handled) {
+  process.exit(cliResult.exitCode);
 }
 
 const store = new ContextModeStore();
@@ -258,6 +163,14 @@ function sendError(id, code, message, data) {
   });
 }
 
+function isPlainObject(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+}
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -265,108 +178,168 @@ const rl = readline.createInterface({
 });
 
 rl.on("line", async (line) => {
-  const trimmed = line.trim();
-  if (!trimmed) return;
-
-  let msg;
   try {
-    msg = JSON.parse(trimmed);
-  } catch (err) {
-    sendError(null, -32700, "Parse error", String(err));
-    return;
-  }
+    const trimmed = line.trim();
+    if (!trimmed) return;
 
-  const { id, method, params } = msg;
-
-  // Notifications (no id)
-  if (id === undefined || id === null) {
-    if (method === "notifications/initialized") {
-      // client initialized confirmation
+    let msg;
+    try {
+      msg = JSON.parse(trimmed);
+    } catch (err) {
+      sendError(null, -32700, "Parse error", String(err));
+      return;
     }
-    return;
-  }
 
-  // Handle requests
-  try {
-    switch (method) {
-      case "initialize": {
-        if (params?.rootPath) currentCwd = params.rootPath;
-        if (params?.sessionId) currentSessionId = params.sessionId;
-        sendResponse(id, {
-          protocolVersion: "2024-11-05",
-          capabilities: {
-            tools: {}
-          },
-          serverInfo: {
-            name: "antigravity-plugin-context-mode",
-            version: pkgVersion
+    if (!msg || typeof msg !== "object" || Array.isArray(msg)) {
+      sendError(null, -32600, "Invalid Request: expected JSON-RPC object");
+      return;
+    }
+
+    const { id, method, params } = msg;
+
+    // Notifications carry no id and require no JSON-RPC response
+    if (id === undefined || id === null) {
+      return;
+    }
+
+    if (typeof method !== "string" || method.trim().length === 0) {
+      sendError(id, -32600, "Invalid Request: method must be a non-empty string");
+      return;
+    }
+
+    // Handle requests
+    try {
+      switch (method) {
+        case "initialize": {
+          if (params !== undefined && !isPlainObject(params)) {
+            sendError(id, -32602, "Invalid params: expected plain object");
+            break;
           }
-        });
-        break;
-      }
-
-      case "ping": {
-        sendResponse(id, {});
-        break;
-      }
-
-      case "tools/list": {
-        sendResponse(id, {
-          tools: TOOL_DEFINITIONS
-        });
-        break;
-      }
-
-      case "tools/call": {
-        const toolName = params?.name;
-        const toolArgs = params?.arguments || {};
-        const callSessionId =
-          toolArgs.sessionId ||
-          params?._meta?.conversationId ||
-          params?._meta?.sessionId ||
-          params?.sessionId;
-        if (callSessionId) {
-          currentSessionId = callSessionId;
-        }
-
-        if (!tools[toolName]) {
-          sendError(id, -32601, `Unknown tool: ${toolName}`);
+          if (
+            params?.rootPath !== undefined &&
+            (typeof params.rootPath !== "string" || params.rootPath.trim().length === 0)
+          ) {
+            sendError(id, -32602, "Invalid params: rootPath must be a non-empty string");
+            break;
+          }
+          if (
+            params?.sessionId !== undefined &&
+            (typeof params.sessionId !== "string" || params.sessionId.trim().length === 0)
+          ) {
+            sendError(id, -32602, "Invalid params: sessionId must be a non-empty string");
+            break;
+          }
+          if (params?.rootPath !== undefined) {
+            currentCwd = params.rootPath;
+          }
+          if (params?.sessionId !== undefined) {
+            currentSessionId = params.sessionId.trim();
+          }
+          sendResponse(id, {
+            protocolVersion: "2024-11-05",
+            capabilities: {
+              tools: {}
+            },
+            serverInfo: {
+              name: "context-mode",
+              version: pkgVersion
+            }
+          });
           break;
         }
 
-        try {
-          const result = await tools[toolName](toolArgs);
-          sendResponse(id, {
-            content: [
-              {
-                type: "text",
-                text: typeof result === "string" ? result : JSON.stringify(result, null, 2)
-              }
-            ],
-            isError: false
-          });
-        } catch (toolErr) {
-          sendResponse(id, {
-            content: [
-              {
-                type: "text",
-                text: `Tool error (${toolName}): ${toolErr.message || String(toolErr)}`
-              }
-            ],
-            isError: true
-          });
+        case "ping": {
+          sendResponse(id, {});
+          break;
         }
-        break;
-      }
 
-      default: {
-        sendError(id, -32601, `Method not found: ${method}`);
-        break;
+        case "tools/list": {
+          sendResponse(id, {
+            tools: TOOL_DEFINITIONS
+          });
+          break;
+        }
+
+        case "tools/call": {
+          if (!params || typeof params !== "object" || Array.isArray(params)) {
+            sendError(id, -32602, "Invalid params: expected object");
+            break;
+          }
+
+          const toolName = params.name;
+          if (typeof toolName !== "string" || toolName.length === 0) {
+            sendError(id, -32602, "Invalid params: name must be a non-empty string");
+            break;
+          }
+          if (!Object.hasOwn(tools, toolName) || typeof tools[toolName] !== "function") {
+            sendError(id, -32601, `Unknown tool: ${toolName}`);
+            break;
+          }
+
+          const rawArgs = params.arguments;
+          if (
+            rawArgs !== undefined &&
+            (rawArgs === null || typeof rawArgs !== "object" || Array.isArray(rawArgs))
+          ) {
+            sendError(id, -32602, "Invalid params: arguments must be a plain object");
+            break;
+          }
+
+          const toolArgs = rawArgs || {};
+          const callSessionId = [
+            toolArgs.sessionId,
+            params._meta?.conversationId,
+            params._meta?.sessionId,
+            params.sessionId
+          ].find((candidate) => typeof candidate === "string" && candidate.trim().length > 0);
+          if (callSessionId) {
+            currentSessionId = callSessionId.trim();
+          }
+
+          try {
+            const result = await tools[toolName](toolArgs);
+            sendResponse(id, {
+              content: [
+                {
+                  type: "text",
+                  text: formatToolResultMarkdown(toolName, result)
+                }
+              ],
+              isError: false
+            });
+          } catch (toolErr) {
+            sendResponse(id, {
+              content: [
+                {
+                  type: "text",
+                  text: `Tool error (${toolName}): ${toolErr?.message || String(toolErr)}`
+                }
+              ],
+              isError: true
+            });
+          }
+          break;
+        }
+
+        default: {
+          sendError(id, -32601, `Method not found: ${method}`);
+          break;
+        }
       }
+    } catch (handlerErr) {
+      sendError(id, -32603, "Internal server error", String(handlerErr));
     }
-  } catch (handlerErr) {
-    sendError(id, -32603, "Internal server error", String(handlerErr));
+  } catch (listenerErr) {
+    sendError(null, -32603, "Internal server error", String(listenerErr));
   }
+});
+
+rl.on("close", () => {
+  store.close();
+});
+
+process.on("exit", () => {
+  store.close();
 });
 
 process.on("SIGINT", () => {
